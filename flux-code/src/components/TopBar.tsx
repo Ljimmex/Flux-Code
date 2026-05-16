@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { GitCompare, Terminal } from './icons';
+import { GitCompare, Terminal, RotateCcw } from './icons';
 
 interface Props {
   activeProject: { name: string } | null;
   activeThread: { title: string; mode: string } | null;
+  view?: 'chat' | 'settings';
+  onRestoreDefaults?: () => void;
 }
 
-export default function TopBar({ activeProject, activeThread }: Props) {
+export default function TopBar({ activeProject, activeThread, view = 'chat', onRestoreDefaults }: Props) {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -22,7 +24,9 @@ export default function TopBar({ activeProject, activeThread }: Props) {
   return (
     <header className="topbar">
       <div className="topbar-left">
-        {activeThread ? (
+        {view === 'settings' ? (
+          <span className="thread-name">Settings</span>
+        ) : activeThread ? (
           <div className="thread-badge-group">
             <span className="thread-name">{activeThread.title}</span>
             {activeProject && (
@@ -37,12 +41,22 @@ export default function TopBar({ activeProject, activeThread }: Props) {
       <div className="topbar-center drag-region" />
 
       <div className="topbar-right">
-        <button className="topbar-btn" title="Open diff panel">
-          <GitCompare size={16} />
-        </button>
-        <button className="topbar-btn" title="Open Terminal">
-          <Terminal size={16} />
-        </button>
+        {view === 'settings' && onRestoreDefaults && (
+          <button className="topbar-btn restore-btn" onClick={onRestoreDefaults} title="Restore defaults">
+            <RotateCcw size={14} />
+            <span>Restore defaults</span>
+          </button>
+        )}
+        {view === 'chat' && (
+          <>
+            <button className="topbar-btn" title="Open diff panel">
+              <GitCompare size={16} />
+            </button>
+            <button className="topbar-btn" title="Open Terminal">
+              <Terminal size={16} />
+            </button>
+          </>
+        )}
         <div className="window-controls">
           <button className="window-btn minimize" onClick={() => window.electronAPI.window.minimize()} title="Minimize">
             <MinimizeIcon />

@@ -4,7 +4,7 @@ import ProjectSidebar from './components/ProjectSidebar';
 import MainPanel from './components/MainPanel';
 import TopBar from './components/TopBar';
 import SearchModal from './components/SearchModal';
-import SettingsModal, { initTheme, loadShortcuts, type ShortcutId } from './components/SettingsModal';
+import SettingsPanel, { initTheme, loadShortcuts, type ShortcutId } from './components/SettingsPanel';
 import './styles/global.css';
 
 export interface Project {
@@ -38,7 +38,7 @@ export default function App() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [view, setView] = useState<'chat' | 'settings'>('chat');
   const [sidebarVisible, setSidebarVisible] = useState(true);
 
   const loadProjects = useCallback(async () => {
@@ -116,7 +116,7 @@ export default function App() {
       // Open settings: Ctrl/Cmd + ,
       if (isEnabled('open-settings') && isCtrl && e.key === ',' && !e.altKey && !e.shiftKey) {
         e.preventDefault();
-        setSettingsOpen(prev => !prev);
+        setView('settings');
       }
 
       // New thread: Ctrl/Cmd + N
@@ -156,7 +156,7 @@ export default function App() {
             loadThreads={loadThreads}
             loadProjects={loadProjects}
             onOpenSearch={() => setSearchOpen(true)}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={() => setView('settings')}
           />
         }
         main={
@@ -164,14 +164,25 @@ export default function App() {
             <TopBar
               activeProject={activeProject}
               activeThread={activeThread}
+              view={view}
+              onRestoreDefaults={() => { /* handled inside SettingsPanel */ }}
             />
-            <MainPanel
-              activeThread={activeThread}
-              activeProject={activeProject}
-              onAddThread={(title, mode) => {
-                if (activeProject) handleAddThread(activeProject.id, title, mode);
-              }}
-            />
+            {view === 'settings' ? (
+              <SettingsPanel
+                onBack={() => setView('chat')}
+                projects={projects}
+                onRemoveProject={handleRemoveProject}
+                onRestoreDefaults={() => {}}
+              />
+            ) : (
+              <MainPanel
+                activeThread={activeThread}
+                activeProject={activeProject}
+                onAddThread={(title, mode) => {
+                  if (activeProject) handleAddThread(activeProject.id, title, mode);
+                }}
+              />
+            )}
           </div>
         }
       />
@@ -187,12 +198,6 @@ export default function App() {
           onClose={() => setSearchOpen(false)}
         />
       )}
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        projects={projects}
-        onRemoveProject={handleRemoveProject}
-      />
     </div>
   );
 }
