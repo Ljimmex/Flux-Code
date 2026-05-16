@@ -2396,11 +2396,28 @@ textarea {
   margin-bottom: 8px;
 }
 
+.settings-motion-wrapper,
+.chat-motion-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
 /* Archive section */
 .archive-section {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+.archive-group {
+  margin-top: 16px;
+}
+
+.archive-group:first-child {
+  margin-top: 0;
 }
 
 .archive-group-title {
@@ -2409,7 +2426,7 @@ textarea {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .archive-list {
@@ -2434,6 +2451,7 @@ textarea {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  flex: 1;
 }
 
 .archive-card-title {
