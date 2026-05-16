@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { GitCompare, Terminal, RefreshCw } from './icons';
+import { GitCompare, Terminal, RotateCcw } from './icons';
 
 interface Props {
   activeProject: { name: string } | null;
@@ -24,16 +24,18 @@ export default function TopBar({ activeProject, activeThread, view = 'chat', onR
   return (
     <header className="topbar">
       <div className="topbar-left">
-        {view === 'chat' && activeThread ? (
+        {view === 'settings' ? (
+          <span className="thread-name">Settings</span>
+        ) : activeThread ? (
           <div className="thread-badge-group">
             <span className="thread-name">{activeThread.title}</span>
             {activeProject && (
               <span className="project-badge">{activeProject.name}</span>
             )}
           </div>
-        ) : view === 'chat' ? (
+        ) : (
           <span className="topbar-placeholder">No active thread</span>
-        ) : null}
+        )}
       </div>
 
       <div className="topbar-center drag-region" />
@@ -41,7 +43,7 @@ export default function TopBar({ activeProject, activeThread, view = 'chat', onR
       <div className="topbar-right">
         {view === 'settings' && onRestoreDefaults && (
           <button className="topbar-btn restore-btn" onClick={onRestoreDefaults} title="Restore defaults">
-            <RefreshCw size={14} />
+            <RotateCcw size={14} />
             <span>Restore defaults</span>
           </button>
         )}
@@ -54,9 +56,6 @@ export default function TopBar({ activeProject, activeThread, view = 'chat', onR
               <Terminal size={16} />
             </button>
           </>
-        )}
-        {view === 'settings' && (
-          <span className="topbar-settings-label">Settings</span>
         )}
         <div className="window-controls">
           <button className="window-btn minimize" onClick={() => window.electronAPI.window.minimize()} title="Minimize">

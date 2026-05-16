@@ -182,6 +182,23 @@ textarea {
   color: var(--text-primary);
 }
 
+.topbar-btn.restore-btn {
+  width: auto;
+  gap: 6px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.topbar-btn.restore-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-light);
+  color: var(--text-primary);
+}
+
 .topbar-brand {
   display: flex;
   align-items: center;
