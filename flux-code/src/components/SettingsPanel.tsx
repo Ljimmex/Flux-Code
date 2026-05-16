@@ -187,15 +187,9 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPa
 
   useImperativeHandle(ref, () => ({ restoreDefaults: handleRestore }));
 
-  const activeLabel = SECTIONS.find(s => s.id === section)?.label ?? 'General';
-
   return (
     <div className="settings-view">
       <main className="settings-view-content">
-        <div className="settings-view-header">
-          <h2 className="settings-view-section-title">{activeLabel.toUpperCase()}</h2>
-        </div>
-
         <AnimatePresence mode="wait">
           <motion.div
             key={section}
