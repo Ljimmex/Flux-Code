@@ -134,13 +134,12 @@ export class DatabaseManager {
       this.db.exec(migration);
     }
     // Add is_read column to threads if not exists (backward compat)
-    try {
+    const cols = this.db.pragma("table_info(threads)") as Array<{ name: string }>;
+    const hasIsRead = cols.some(c => c.name === 'is_read');
+    if (!hasIsRead) {
       this.db.exec('ALTER TABLE threads ADD COLUMN is_read INTEGER DEFAULT 1');
-      this.db.exec("UPDATE threads SET is_read = 1 WHERE is_read IS NULL");
-    } catch {
-      // Column already exists — ensure no nulls remain
-      this.db.exec("UPDATE threads SET is_read = 1 WHERE is_read IS NULL");
     }
+    this.db.exec("UPDATE threads SET is_read = 1 WHERE is_read IS NULL");
   }
 
   private seedBuiltInSkills(): void {

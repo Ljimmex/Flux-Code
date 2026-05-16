@@ -15,7 +15,7 @@ interface Props {
   activeThread: Thread | null;
   getProjectThreads: (projectId: number) => Thread[];
   onSelectProject: (p: Project) => void;
-  onSelectThread: (t: Thread) => void;
+  onSelectThread: (t: Thread | null) => void;
   onAddProject: () => void;
   onRemoveProject: (id: number) => void;
   onAddThread: (projectId: number, title: string, mode?: string) => void;
@@ -136,9 +136,11 @@ export default function ProjectSidebar({
     const prevIds = new Set(prevThreadsRef.current.map(t => t.id));
     const newIds = threads.filter(t => !prevIds.has(t.id)).map(t => t.id);
 
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
     if (newIds.length > 0) {
       setEnteringThreads(prev => new Set([...prev, ...newIds]));
-      setTimeout(() => {
+      timer = setTimeout(() => {
         setEnteringThreads(prev => {
           const next = new Set(prev);
           newIds.forEach(id => next.delete(id));
@@ -148,6 +150,9 @@ export default function ProjectSidebar({
     }
 
     prevThreadsRef.current = threads;
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, [threads]);
 
   // Focus rename input when it appears
@@ -264,13 +269,18 @@ export default function ProjectSidebar({
     setExitingThreads(prev => new Set(prev).add(threadId));
     setThreadMenu(null);
     setTimeout(async () => {
-      await window.electronAPI.db.archiveThread(threadId);
-      await loadThreads(projectId);
-      setExitingThreads(prev => {
-        const next = new Set(prev);
-        next.delete(threadId);
-        return next;
-      });
+      try {
+        await window.electronAPI.db.archiveThread(threadId);
+        await loadThreads(projectId);
+      } catch (err) {
+        console.error('Failed to archive thread:', err);
+      } finally {
+        setExitingThreads(prev => {
+          const next = new Set(prev);
+          next.delete(threadId);
+          return next;
+        });
+      }
     }, 280);
   };
 
@@ -278,14 +288,19 @@ export default function ProjectSidebar({
     setExitingThreads(prev => new Set(prev).add(threadId));
     setThreadMenu(null);
     setTimeout(async () => {
-      await window.electronAPI.db.deleteThread(threadId);
-      await loadThreads(projectId);
-      if (activeThread?.id === threadId) onSelectThread({} as Thread);
-      setExitingThreads(prev => {
-        const next = new Set(prev);
-        next.delete(threadId);
-        return next;
-      });
+      try {
+        await window.electronAPI.db.deleteThread(threadId);
+        await loadThreads(projectId);
+        if (activeThread?.id === threadId) onSelectThread(null);
+      } catch (err) {
+        console.error('Failed to delete thread:', err);
+      } finally {
+        setExitingThreads(prev => {
+          const next = new Set(prev);
+          next.delete(threadId);
+          return next;
+        });
+      }
     }, 280);
   };
 

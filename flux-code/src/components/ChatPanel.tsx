@@ -30,7 +30,10 @@ const FAV_MODELS_KEY = 'flux:favModels';
 function loadFavModels(): string[] {
   try {
     const raw = localStorage.getItem(FAV_MODELS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === 'string');
   } catch {
     return [];
   }
@@ -54,6 +57,41 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
   const [favModels, setFavModels] = useState<string[]>(loadFavModels);
 
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const sortedModelsRef = useRef(MODELS);
+
+  // Global shortcuts for model selection (Ctrl+1..Ctrl+4)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const current = sortedModelsRef.current;
+      if (e.ctrlKey && !e.altKey && !e.metaKey) {
+        const num = parseInt(e.key, 10);
+        if (!isNaN(num) && num >= 1 && num <= current.length) {
+          e.preventDefault();
+          setSelectedModel(current[num - 1]);
+        }
+      }
+      if (e.key === 'Escape') {
+        setOpenDropdown(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const filteredModels = MODELS.filter(m =>
+    m.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
+    m.provider.toLowerCase().includes(modelSearch.toLowerCase())
+  );
+
+  const sortedModels = [...filteredModels].sort((a, b) => {
+    const aFav = favModels.includes(a.id) ? -1 : 0;
+    const bFav = favModels.includes(b.id) ? -1 : 0;
+    if (aFav !== bFav) return aFav - bFav;
+    return MODELS.findIndex(m => m.id === a.id) - MODELS.findIndex(m => m.id === b.id);
+  });
+
+  // Update ref during render so keyboard handler always sees current sortedModels
+  sortedModelsRef.current = sortedModels;
 
   const toggleFav = (modelId: string) => {
     setFavModels(prev => {
@@ -64,24 +102,6 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
       return next;
     });
   };
-
-  // Global shortcuts for model selection (Ctrl+1..Ctrl+4)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.altKey && !e.metaKey) {
-        const num = parseInt(e.key, 10);
-        if (!isNaN(num) && num >= 1 && num <= sortedModels.length) {
-          e.preventDefault();
-          setSelectedModel(sortedModels[num - 1]);
-        }
-      }
-      if (e.key === 'Escape') {
-        setOpenDropdown(null);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -131,18 +151,6 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
       </div>
     );
   }
-
-  const filteredModels = MODELS.filter(m =>
-    m.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
-    m.provider.toLowerCase().includes(modelSearch.toLowerCase())
-  );
-
-  const sortedModels = [...filteredModels].sort((a, b) => {
-    const aFav = favModels.includes(a.id) ? -1 : 0;
-    const bFav = favModels.includes(b.id) ? -1 : 0;
-    if (aFav !== bFav) return aFav - bFav;
-    return MODELS.findIndex(m => m.id === a.id) - MODELS.findIndex(m => m.id === b.id);
-  });
 
   return (
     <div className="chat-panel">

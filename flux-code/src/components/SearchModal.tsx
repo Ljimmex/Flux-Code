@@ -106,23 +106,28 @@ export default function SearchModal({ projects, threads, activeThread, onSelectT
         onClose();
         return;
       }
-      const currentItems = itemsRef.current;
+      const currentItemsLength = view === 'projects' ? projects.length : itemsRef.current.length;
       const currentIndex = selectedIndex;
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedIndex((currentIndex + 1) % currentItems.length);
+        setSelectedIndex((currentIndex + 1) % currentItemsLength);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedIndex((currentIndex - 1 + currentItems.length) % currentItems.length);
+        setSelectedIndex((currentIndex - 1 + currentItemsLength) % currentItemsLength);
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        const item = currentItems[currentIndex];
-        if (item) handleSelect(item);
+        if (view === 'projects') {
+          const project = projects[currentIndex];
+          if (project) handleSelectProject(project);
+        } else {
+          const item = itemsRef.current[currentIndex];
+          if (item) handleSelect(item);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIndex, onClose, handleSelect, view]);
+  }, [selectedIndex, onClose, handleSelect, view, projects, handleSelectProject]);
 
   if (view === 'projects') {
     return (

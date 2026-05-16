@@ -588,10 +588,10 @@ textarea {
 }
 
 .thread-row.entering {
-  animation: threadEnter 0.35s ease forwards;
+  animation: thread-enter 0.35s ease forwards;
 }
 
-@keyframes threadEnter {
+@keyframes thread-enter {
   from {
     opacity: 0;
     transform: translateY(-8px);
@@ -1628,10 +1628,10 @@ textarea {
   align-items: center;
   justify-content: center;
   z-index: 3000;
-  animation: fadeIn 0.15s ease;
+  animation: fade-in 0.15s ease;
 }
 
-@keyframes fadeIn {
+@keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
@@ -1645,10 +1645,10 @@ textarea {
   max-width: 440px;
   text-align: center;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
-  animation: modalPop 0.2s ease;
+  animation: modal-pop 0.2s ease;
 }
 
-@keyframes modalPop {
+@keyframes modal-pop {
   from { opacity: 0; transform: scale(0.96); }
   to { opacity: 1; transform: scale(1); }
 }
@@ -1717,7 +1717,7 @@ textarea {
   align-items: center;
   justify-content: center;
   z-index: 2500;
-  animation: fadeIn 0.15s ease;
+  animation: fade-in 0.15s ease;
 }
 
 .settings-modal {
@@ -1730,7 +1730,7 @@ textarea {
   display: flex;
   flex-direction: column;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
-  animation: modalPop 0.2s ease;
+  animation: modal-pop 0.2s ease;
   overflow: hidden;
 }
 
@@ -1967,11 +1967,11 @@ textarea {
     var(--bg-tertiary) 75%
   );
   background-size: 200% 100%;
-  animation: skeletonShimmer 1.5s infinite;
+  animation: skeleton-shimmer 1.5s infinite;
   border-radius: var(--radius-sm);
 }
 
-@keyframes skeletonShimmer {
+@keyframes skeleton-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
