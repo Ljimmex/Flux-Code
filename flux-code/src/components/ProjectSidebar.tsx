@@ -7,6 +7,7 @@ import {
 } from './icons';
 import logo from '../Fluxavatar.png';
 import type { Project, Thread } from '../App';
+import { SECTIONS, type Section } from './SettingsPanel';
 
 interface Props {
   projects: Project[];
@@ -25,6 +26,8 @@ interface Props {
   onOpenSettings: () => void;
   view?: 'chat' | 'settings';
   onBack?: () => void;
+  settingsSection?: Section;
+  onSelectSettingsSection?: (section: Section) => void;
 }
 
 interface ProjectMenuPos {
@@ -112,6 +115,8 @@ export default function ProjectSidebar({
   onOpenSettings,
   view = 'chat',
   onBack,
+  settingsSection = 'general',
+  onSelectSettingsSection,
 }: Props) {
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<number>>(new Set());
   const [expandedThreadLists, setExpandedThreadLists] = useState<Set<number>>(new Set());
@@ -369,255 +374,273 @@ export default function ProjectSidebar({
         <span className="sidebar-brand-name">Flux Code</span>
       </div>
 
-      {/* Search */}
-      <div className="sidebar-search" onClick={onOpenSearch}>
-        <Search size={14} />
-        <span className="sidebar-search-placeholder">Search</span>
-        <span className="sidebar-search-shortcut">Ctrl+K</span>
-      </div>
-
-      {/* Header */}
-      <div className="sidebar-header">
-        <h3>Projects</h3>
-        <div className="sidebar-actions">
-          <button className="icon-btn" onClick={onAddProject} title="Add Project">
-            <FolderPlus size={14} />
-          </button>
-          <div className="sidebar-options-wrapper">
-            <button
-              ref={optionsBtnRef}
-              className="icon-btn"
-              onClick={(e) => { e.stopPropagation(); setSidebarOptionsOpen(!sidebarOptionsOpen); }}
-              title="Sidebar options"
-            >
-              <MoreHorizontal size={14} />
-            </button>
-            {sidebarOptionsOpen && (
-              <div ref={optionsRef} className="sidebar-options-menu">
-                <div className="options-section">
-                  <div className="options-label">Sort projects</div>
-                  <button className={`options-item ${opts.projectSort === 'lastMessage' ? 'active' : ''}`} onClick={() => updateOpts({ projectSort: 'lastMessage' })}>
-                    {opts.projectSort === 'lastMessage' && <Check size={12} />} Last user message
-                  </button>
-                  <button className={`options-item ${opts.projectSort === 'createdAt' ? 'active' : ''}`} onClick={() => updateOpts({ projectSort: 'createdAt' })}>
-                    {opts.projectSort === 'createdAt' && <Check size={12} />} Created at
-                  </button>
-                  <button className={`options-item ${opts.projectSort === 'name' ? 'active' : ''}`} onClick={() => updateOpts({ projectSort: 'name' })}>
-                    {opts.projectSort === 'name' && <Check size={12} />} Name
-                  </button>
-                  <button className={`options-item ${opts.projectSort === 'manual' ? 'active' : ''}`} onClick={() => updateOpts({ projectSort: 'manual' })}>
-                    {opts.projectSort === 'manual' && <Check size={12} />} Manual
-                  </button>
-                </div>
-                <div className="options-section">
-                  <div className="options-label">Sort threads</div>
-                  <button className={`options-item ${opts.threadSort === 'lastMessage' ? 'active' : ''}`} onClick={() => updateOpts({ threadSort: 'lastMessage' })}>
-                    {opts.threadSort === 'lastMessage' && <Check size={12} />} Last user message
-                  </button>
-                  <button className={`options-item ${opts.threadSort === 'createdAt' ? 'active' : ''}`} onClick={() => updateOpts({ threadSort: 'createdAt' })}>
-                    {opts.threadSort === 'createdAt' && <Check size={12} />} Created at
-                  </button>
-                </div>
-                <div className="options-section">
-                  <div className="options-label">Visible threads</div>
-                  <div className="options-counter">
-                    <button className="counter-btn" onClick={() => updateOpts({ visibleThreadCount: Math.max(1, opts.visibleThreadCount - 1) })}><Minus size={12} /></button>
-                    <span className="counter-value">{opts.visibleThreadCount}</span>
-                    <button className="counter-btn" onClick={() => updateOpts({ visibleThreadCount: Math.min(30, opts.visibleThreadCount + 1) })}><Plus size={12} /></button>
-                  </div>
-                </div>
-                <div className="options-section">
-                  <div className="options-label">Group projects</div>
-                  <button className={`options-item ${opts.groupBy === 'repository' ? 'active' : ''}`} onClick={() => updateOpts({ groupBy: 'repository' })}>
-                    {opts.groupBy === 'repository' && <Check size={12} />} Group by repository
-                  </button>
-                  <button className={`options-item ${opts.groupBy === 'none' ? 'active' : ''}`} onClick={() => updateOpts({ groupBy: 'none' })}>
-                    {opts.groupBy === 'none' && <Check size={12} />} Keep separate
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="projects-list">
-        {projects.length === 0 && (
-          <div className="empty-state">
-            <FolderGit2 size={28} />
-            <p>No projects yet</p>
-            <button className="btn-primary" onClick={onAddProject}>Add your first project</button>
-          </div>
-        )}
-
-        {sortedProjects.map((project) => {
-          const isExpanded = expandedProjectIds.has(project.id);
-          const projectThreads = getSortedThreads(project.id);
-
-          return (
-            <div key={project.id} className="project-group">
-              <div
-                className="project-header-row"
-                onClick={() => toggleProject(project)}
-                onContextMenu={(e) => handleProjectContext(e, project.id)}
+      {view === 'settings' ? (
+        <>
+          <div className="sidebar-settings-nav">
+            {SECTIONS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                className={`sidebar-settings-nav-item ${settingsSection === id ? 'active' : ''}`}
+                onClick={() => onSelectSettingsSection?.(id)}
               >
-                <button className="expand-btn">
-                  {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                <Icon size={16} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+          <div className="sidebar-nav">
+            <button className="nav-item" onClick={onBack}>
+              <ArrowLeft size={14} />
+              <span>Back</span>
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Search */}
+          <div className="sidebar-search" onClick={onOpenSearch}>
+            <Search size={14} />
+            <span className="sidebar-search-placeholder">Search</span>
+            <span className="sidebar-search-shortcut">Ctrl+K</span>
+          </div>
+
+          {/* Header */}
+          <div className="sidebar-header">
+            <h3>Projects</h3>
+            <div className="sidebar-actions">
+              <button className="icon-btn" onClick={onAddProject} title="Add Project">
+                <FolderPlus size={14} />
+              </button>
+              <div className="sidebar-options-wrapper">
+                <button
+                  ref={optionsBtnRef}
+                  className="icon-btn"
+                  onClick={(e) => { e.stopPropagation(); setSidebarOptionsOpen(!sidebarOptionsOpen); }}
+                  title="Sidebar options"
+                >
+                  <MoreHorizontal size={14} />
                 </button>
-                <div className="project-icon-sm"><Folder size={12} /></div>
-                {renamingProject === project.id ? (
-                  <input
-                    ref={renameInputRef}
-                    className="rename-input"
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onBlur={() => handleRenameProject(project.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleRenameProject(project.id);
-                      if (e.key === 'Escape') { setRenamingProject(null); setRenameValue(''); }
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <div className="project-info-sm">
-                    <span className="project-name-sm">{project.name}</span>
-                    {project.git_branch && (
-                      <span className="branch-badge-sm">{project.git_branch}</span>
-                    )}
+                {sidebarOptionsOpen && (
+                  <div ref={optionsRef} className="sidebar-options-menu">
+                    <div className="options-section">
+                      <div className="options-label">Sort projects</div>
+                      <button className={`options-item ${opts.projectSort === 'lastMessage' ? 'active' : ''}`} onClick={() => updateOpts({ projectSort: 'lastMessage' })}>
+                        {opts.projectSort === 'lastMessage' && <Check size={12} />} Last user message
+                      </button>
+                      <button className={`options-item ${opts.projectSort === 'createdAt' ? 'active' : ''}`} onClick={() => updateOpts({ projectSort: 'createdAt' })}>
+                        {opts.projectSort === 'createdAt' && <Check size={12} />} Created at
+                      </button>
+                      <button className={`options-item ${opts.projectSort === 'name' ? 'active' : ''}`} onClick={() => updateOpts({ projectSort: 'name' })}>
+                        {opts.projectSort === 'name' && <Check size={12} />} Name
+                      </button>
+                      <button className={`options-item ${opts.projectSort === 'manual' ? 'active' : ''}`} onClick={() => updateOpts({ projectSort: 'manual' })}>
+                        {opts.projectSort === 'manual' && <Check size={12} />} Manual
+                      </button>
+                    </div>
+                    <div className="options-section">
+                      <div className="options-label">Sort threads</div>
+                      <button className={`options-item ${opts.threadSort === 'lastMessage' ? 'active' : ''}`} onClick={() => updateOpts({ threadSort: 'lastMessage' })}>
+                        {opts.threadSort === 'lastMessage' && <Check size={12} />} Last user message
+                      </button>
+                      <button className={`options-item ${opts.threadSort === 'createdAt' ? 'active' : ''}`} onClick={() => updateOpts({ threadSort: 'createdAt' })}>
+                        {opts.threadSort === 'createdAt' && <Check size={12} />} Created at
+                      </button>
+                    </div>
+                    <div className="options-section">
+                      <div className="options-label">Visible threads</div>
+                      <div className="options-counter">
+                        <button className="counter-btn" onClick={() => updateOpts({ visibleThreadCount: Math.max(1, opts.visibleThreadCount - 1) })}><Minus size={12} /></button>
+                        <span className="counter-value">{opts.visibleThreadCount}</span>
+                        <button className="counter-btn" onClick={() => updateOpts({ visibleThreadCount: Math.min(30, opts.visibleThreadCount + 1) })}><Plus size={12} /></button>
+                      </div>
+                    </div>
+                    <div className="options-section">
+                      <div className="options-label">Group projects</div>
+                      <button className={`options-item ${opts.groupBy === 'repository' ? 'active' : ''}`} onClick={() => updateOpts({ groupBy: 'repository' })}>
+                        {opts.groupBy === 'repository' && <Check size={12} />} Group by repository
+                      </button>
+                      <button className={`options-item ${opts.groupBy === 'none' ? 'active' : ''}`} onClick={() => updateOpts({ groupBy: 'none' })}>
+                        {opts.groupBy === 'none' && <Check size={12} />} Keep separate
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
+            </div>
+          </div>
 
-              {isExpanded && (
-                <div className="project-threads">
-                  {projectThreads.length === 0 && (
-                    <div className="project-threads-empty">
-                      <span>No threads yet</span>
-                      <button
-                        className="icon-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAddThread(project.id, 'New Thread', 'chat');
+          <div className="projects-list">
+            {projects.length === 0 && (
+              <div className="empty-state">
+                <FolderGit2 size={28} />
+                <p>No projects yet</p>
+                <button className="btn-primary" onClick={onAddProject}>Add your first project</button>
+              </div>
+            )}
+
+            {sortedProjects.map((project) => {
+              const isExpanded = expandedProjectIds.has(project.id);
+              const projectThreads = getSortedThreads(project.id);
+
+              return (
+                <div key={project.id} className="project-group">
+                  <div
+                    className="project-header-row"
+                    onClick={() => toggleProject(project)}
+                    onContextMenu={(e) => handleProjectContext(e, project.id)}
+                  >
+                    <button className="expand-btn">
+                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    <div className="project-icon-sm"><Folder size={12} /></div>
+                    {renamingProject === project.id ? (
+                      <input
+                        ref={renameInputRef}
+                        className="rename-input"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={() => handleRenameProject(project.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameProject(project.id);
+                          if (e.key === 'Escape') { setRenamingProject(null); setRenameValue(''); }
                         }}
-                        title="New Thread"
-                      >
-                        <Plus size={12} />
-                      </button>
-                    </div>
-                  )}
-                  {projectThreads.map((thread) => {
-                    const isThreadActive = activeThread?.id === thread.id;
-                    const isHovered = hoveredThreadId === thread.id;
-                    const isUnread = thread.is_read === 0;
-                    const isExiting = exitingThreads.has(thread.id);
-                    const isEntering = enteringThreads.has(thread.id);
-                    return (
-                      <div
-                        key={thread.id}
-                        className={`thread-row ${isThreadActive ? 'active' : ''} ${isUnread ? 'unread' : ''} ${isExiting ? 'exiting' : ''} ${isEntering ? 'entering' : ''}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectThread(thread);
-                          onSelectProject(project);
-                        }}
-                        onContextMenu={(e) => handleThreadContext(e, thread.id, project.id)}
-                        onMouseEnter={() => setHoveredThreadId(thread.id)}
-                        onMouseLeave={() => setHoveredThreadId(null)}
-                      >
-                        {renamingThread === thread.id ? (
-                          <input
-                            ref={renameInputRef}
-                            className="rename-input thread-rename"
-                            value={renameValue}
-                            onChange={(e) => setRenameValue(e.target.value)}
-                            onBlur={() => handleRenameThread(thread.id)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleRenameThread(thread.id);
-                              if (e.key === 'Escape') { setRenamingThread(null); setRenameValue(''); }
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        ) : (
-                          <>
-                            {isUnread && <span className="thread-unread-dot" />}
-                            <span className={`thread-row-title ${isUnread ? 'unread' : ''}`}>{thread.title}</span>
-                            {isHovered ? (
-                              <button
-                                className="thread-archive-btn"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  requestArchiveThread(thread.id, project.id);
-                                }}
-                                title="Archive"
-                              >
-                                <Archive size={12} />
-                              </button>
-                            ) : (
-                              <span className="thread-row-time">{formatDateTime(thread.updated_at)}</span>
-                            )}
-                          </>
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <div className="project-info-sm">
+                        <span className="project-name-sm">{project.name}</span>
+                        {project.git_branch && (
+                          <span className="branch-badge-sm">{project.git_branch}</span>
                         )}
                       </div>
-                    );
-                  })}
-                  {getProjectThreads(project.id).length > opts.visibleThreadCount && !expandedThreadLists.has(project.id) && (
-                    <button
-                      className="thread-row more-threads"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpandedThreadLists(prev => new Set(prev).add(project.id));
-                      }}
-                    >
-                      <span>+{getProjectThreads(project.id).length - opts.visibleThreadCount} more</span>
-                    </button>
-                  )}
-                  {expandedThreadLists.has(project.id) && getProjectThreads(project.id).length > opts.visibleThreadCount && (
-                    <button
-                      className="thread-row more-threads"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpandedThreadLists(prev => {
-                          const next = new Set(prev);
-                          next.delete(project.id);
-                          return next;
-                        });
-                      }}
-                    >
-                      <span>-{getProjectThreads(project.id).length - opts.visibleThreadCount} less</span>
-                    </button>
-                  )}
-                  {projectThreads.length > 0 && (
-                    <button
-                      className="thread-row add-thread-row"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddThread(project.id, 'New Thread', 'chat');
-                      }}
-                    >
-                      <Plus size={12} />
-                      <span>New thread</span>
-                    </button>
+                    )}
+                  </div>
+
+                  {isExpanded && (
+                    <div className="project-threads">
+                      {projectThreads.length === 0 && (
+                        <div className="project-threads-empty">
+                          <span>No threads yet</span>
+                          <button
+                            className="icon-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAddThread(project.id, 'New Thread', 'chat');
+                            }}
+                            title="New Thread"
+                          >
+                            <Plus size={12} />
+                          </button>
+                        </div>
+                      )}
+                      {projectThreads.map((thread) => {
+                        const isThreadActive = activeThread?.id === thread.id;
+                        const isHovered = hoveredThreadId === thread.id;
+                        const isUnread = thread.is_read === 0;
+                        const isExiting = exitingThreads.has(thread.id);
+                        const isEntering = enteringThreads.has(thread.id);
+                        return (
+                          <div
+                            key={thread.id}
+                            className={`thread-row ${isThreadActive ? 'active' : ''} ${isUnread ? 'unread' : ''} ${isExiting ? 'exiting' : ''} ${isEntering ? 'entering' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectThread(thread);
+                              onSelectProject(project);
+                            }}
+                            onContextMenu={(e) => handleThreadContext(e, thread.id, project.id)}
+                            onMouseEnter={() => setHoveredThreadId(thread.id)}
+                            onMouseLeave={() => setHoveredThreadId(null)}
+                          >
+                            {renamingThread === thread.id ? (
+                              <input
+                                ref={renameInputRef}
+                                className="rename-input thread-rename"
+                                value={renameValue}
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                onBlur={() => handleRenameThread(thread.id)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleRenameThread(thread.id);
+                                  if (e.key === 'Escape') { setRenamingThread(null); setRenameValue(''); }
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            ) : (
+                              <>
+                                {isUnread && <span className="thread-unread-dot" />}
+                                <span className={`thread-row-title ${isUnread ? 'unread' : ''}`}>{thread.title}</span>
+                                {isHovered ? (
+                                  <button
+                                    className="thread-archive-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      requestArchiveThread(thread.id, project.id);
+                                    }}
+                                    title="Archive"
+                                  >
+                                    <Archive size={12} />
+                                  </button>
+                                ) : (
+                                  <span className="thread-row-time">{formatDateTime(thread.updated_at)}</span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {getProjectThreads(project.id).length > opts.visibleThreadCount && !expandedThreadLists.has(project.id) && (
+                        <button
+                          className="thread-row more-threads"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedThreadLists(prev => new Set(prev).add(project.id));
+                          }}
+                        >
+                          <span>+{getProjectThreads(project.id).length - opts.visibleThreadCount} more</span>
+                        </button>
+                      )}
+                      {expandedThreadLists.has(project.id) && getProjectThreads(project.id).length > opts.visibleThreadCount && (
+                        <button
+                          className="thread-row more-threads"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedThreadLists(prev => {
+                              const next = new Set(prev);
+                              next.delete(project.id);
+                              return next;
+                            });
+                          }}
+                        >
+                          <span>-{getProjectThreads(project.id).length - opts.visibleThreadCount} less</span>
+                        </button>
+                      )}
+                      {projectThreads.length > 0 && (
+                        <button
+                          className="thread-row add-thread-row"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAddThread(project.id, 'New Thread', 'chat');
+                          }}
+                        >
+                          <Plus size={12} />
+                          <span>New thread</span>
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
 
-      <div className="sidebar-nav">
-        {view === 'settings' ? (
-          <button className="nav-item" onClick={onBack}>
-            <ArrowLeft size={14} />
-            <span>Back</span>
-          </button>
-        ) : (
-          <button className="nav-item" onClick={onOpenSettings}>
-            <Settings size={14} />
-            <span>Settings</span>
-          </button>
-        )}
-      </div>
+          <div className="sidebar-nav">
+            <button className="nav-item" onClick={onOpenSettings}>
+              <Settings size={14} />
+              <span>Settings</span>
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Project Context Menu */}
       {projectMenu && projMenuProject && (

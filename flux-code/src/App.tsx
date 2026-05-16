@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import ResizablePanels from './components/ResizablePanels';
 import ProjectSidebar from './components/ProjectSidebar';
 import MainPanel from './components/MainPanel';
 import TopBar from './components/TopBar';
 import SearchModal from './components/SearchModal';
-import SettingsPanel, { initTheme, loadShortcuts, type ShortcutId } from './components/SettingsPanel';
+import SettingsPanel, { initTheme, loadShortcuts, type ShortcutId, type Section, type SettingsPanelHandle } from './components/SettingsPanel';
 import './styles/global.css';
 
 export interface Project {
@@ -39,6 +39,8 @@ export default function App() {
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [view, setView] = useState<'chat' | 'settings'>('chat');
+  const [settingsSection, setSettingsSection] = useState<Section>('general');
+  const settingsPanelRef = useRef<SettingsPanelHandle>(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
 
   const loadProjects = useCallback(async () => {
@@ -159,6 +161,8 @@ export default function App() {
             onOpenSettings={() => setView('settings')}
             view={view}
             onBack={() => setView('chat')}
+            settingsSection={settingsSection}
+            onSelectSettingsSection={setSettingsSection}
           />
         }
         main={
@@ -167,9 +171,15 @@ export default function App() {
               activeProject={activeProject}
               activeThread={activeThread}
               view={view}
+              onRestoreDefaults={() => {
+                setSettingsSection('general');
+                settingsPanelRef.current?.restoreDefaults();
+              }}
             />
             {view === 'settings' ? (
               <SettingsPanel
+                ref={settingsPanelRef}
+                section={settingsSection}
                 projects={projects}
                 onRemoveProject={handleRemoveProject}
                 onRestoreDefaults={() => {}}

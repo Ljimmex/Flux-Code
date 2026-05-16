@@ -1,24 +1,29 @@
-import { useState } from 'react';
+import { useState, forwardRef, useImperativeHandle } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   SlidersHorizontal, Keyboard, Cpu, GitBranch,
-  Globe, Archive, Check
+  Globe, Archive
 } from './icons';
 import type { Project } from '../App';
 
-interface Props {
-  projects: Project[];
-  onRemoveProject: (id: number) => void;
-  onRestoreDefaults: () => void;
-}
-
-type Section =
+export type Section =
   | 'general'
   | 'keybindings'
   | 'providers'
   | 'source-control'
   | 'connections'
   | 'archive';
+
+interface Props {
+  section: Section;
+  projects: Project[];
+  onRemoveProject: (id: number) => void;
+  onRestoreDefaults: () => void;
+}
+
+export interface SettingsPanelHandle {
+  restoreDefaults: () => void;
+}
 
 const THEME_KEY = 'flux:theme';
 const SHORTCUTS_KEY = 'flux:shortcuts-enabled';
@@ -122,7 +127,7 @@ function SettingRow({
 }
 
 /* ─── Section sidebar data ─── */
-const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
+export const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { id: 'general', label: 'General', icon: SlidersHorizontal },
   { id: 'keybindings', label: 'Keybindings', icon: Keyboard },
   { id: 'providers', label: 'Providers', icon: Cpu },
@@ -131,8 +136,7 @@ const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ size?:
   { id: 'archive', label: 'Archive', icon: Archive },
 ];
 
-export default function SettingsPanel({ projects, onRemoveProject, onRestoreDefaults }: Props) {
-  const [section, setSection] = useState<Section>('general');
+const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPanel({ section, projects, onRemoveProject, onRestoreDefaults }, ref) {
   const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(loadTheme);
   const [shortcuts, setShortcuts] = useState<ShortcutConfig[]>(loadShortcuts);
   const [removeConfirm, setRemoveConfirm] = useState<number | null>(null);
@@ -178,37 +182,15 @@ export default function SettingsPanel({ projects, onRemoveProject, onRestoreDefa
     onRestoreDefaults();
   };
 
+  useImperativeHandle(ref, () => ({ restoreDefaults: handleRestore }));
+
   const activeLabel = SECTIONS.find(s => s.id === section)?.label ?? 'General';
 
   return (
     <div className="settings-view">
-      {/* Left sidebar */}
-      <aside className="settings-view-sidebar">
-        <div className="settings-view-nav">
-          {SECTIONS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              className={`settings-view-nav-item ${section === id ? 'active' : ''}`}
-              onClick={() => setSection(id)}
-            >
-              <Icon size={16} />
-              <span>{label}</span>
-            </button>
-          ))}
-        </div>
-      </aside>
-
-      {/* Right content */}
       <main className="settings-view-content">
-        {/* Header */}
         <div className="settings-view-header">
           <h2 className="settings-view-section-title">{activeLabel.toUpperCase()}</h2>
-          {section === 'general' && (
-            <button className="settings-restore-btn" onClick={handleRestore}>
-              <Check size={14} />
-              <span>Restore defaults</span>
-            </button>
-          )}
         </div>
 
         <AnimatePresence mode="wait">
@@ -359,4 +341,6 @@ export default function SettingsPanel({ projects, onRemoveProject, onRestoreDefa
       </main>
     </div>
   );
-}
+});
+
+export default SettingsPanel;

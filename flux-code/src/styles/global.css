@@ -2042,6 +2042,47 @@ textarea {
   color: #fff;
 }
 
+/* Settings tabs rendered inside the main sidebar */
+.sidebar-settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.sidebar-settings-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sidebar-settings-nav-item.active {
+  background: var(--accent-dim);
+  color: #fff;
+}
+
+/* Settings label in topbar */
+.topbar-settings-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-right: 4px;
+  user-select: none;
+}
+
 .settings-view-back {
   margin-top: auto;
   display: flex;
