@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Code Assistant Desktop App — Blueprint</title>
+  <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --bg-hover: #1f242c;
+      --border-color: #30363d;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #6e7681;
+      --accent: #58a6ff;
+      --accent-hover: #79b8ff;
+      --accent-dim: #1f6feb;
+      --success: #3fb950;
+      --warning: #d29922;
+      --danger: #f85149;
+      --info: #58a6ff;
+      --code-bg: #161b22;
+      --code-border: #30363d;
+      --font-mono: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+      --radius: 8px;
+      --shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.7;
+      font-size: 15px;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+    h1, h2, h3, h4, h5, h6 { font-weight: 600; line-height: 1.3; margin-top: 2em; margin-bottom: 0.6em; }
+    h1 { font-size: 2.2rem; border-bottom: 2px solid var(--accent-dim); padding-bottom: 0.3em; margin-top: 0; }
+    h2 { font-size: 1.7rem; color: var(--accent); border-bottom: 1px solid var(--border-color); padding-bottom: 0.3em; margin-top: 2.5em; }
+    h3 { font-size: 1.35rem; color: var(--text-primary); margin-top: 2em; }
+    h4 { font-size: 1.15rem; color: var(--text-secondary); margin-top: 1.5em; }
+
+    p { margin-bottom: 1em; }
+
+    ul, ol { margin-bottom: 1em; padding-left: 1.8em; }
+    li { margin-bottom: 0.35em; }
+
+    strong { color: var(--text-primary); font-weight: 600; }
+
+    /* Layout */
+    .sidebar {
+      width: 300px;
+      min-width: 250px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      overflow-y: auto;
+      padding: 1.5rem;
+      z-index: 100;
+    }
+
+    .sidebar h2 { font-size: 1.1rem; margin-top: 0; border-bottom: none; padding-bottom: 0; color: var(--text-primary); }
+    .sidebar nav ul { list-style: none; padding-left: 0; margin-top: 1rem; }
+    .sidebar nav li { margin-bottom: 0.15em; }
+    .sidebar nav a { display: block; padding: 0.35rem 0.6rem; border-radius: var(--radius); color: var(--text-secondary); font-size: 0.88rem; transition: background 0.15s, color 0.15s; }
+    .sidebar nav a:hover { background: var(--bg-hover); color: var(--text-primary); text-decoration: none; }
+    .sidebar nav a.active { background: var(--accent-dim); color: #fff; }
+    .sidebar .toc-h2 { font-weight: 600; color: var(--text-primary); }
+    .sidebar .toc-h3 { padding-left: 1.2rem; font-size: 0.82rem; }
+
+    .main-content {
+      margin-left: 300px;
+      flex: 1;
+      max-width: 960px;
+      padding: 3rem 2.5rem;
+    }
+
+    /* Header */
+    .doc-header {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 2rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow);
+    }
+    .doc-header .badge {
+      display: inline-block;
+      background: var(--accent-dim);
+      color: #fff;
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .doc-header h1 { margin-bottom: 0.5rem; border-bottom: none; padding-bottom: 0; }
+    .doc-header .meta { color: var(--text-muted); font-size: 0.9rem; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5rem 0;
+      font-size: 0.9rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    th, td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+    th {
+      background: var(--bg-tertiary);
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      font-size: 0.8rem;
+      letter-spacing: 0.04em;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg-hover); }
+
+    /* Code blocks */
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--code-border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.6;
+      margin: 1.2rem 0;
+      color: var(--text-primary);
+    }
+    code {
+      font-family: var(--font-mono);
+      background: var(--bg-tertiary);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.88em;
+      color: var(--accent);
+    }
+    pre code { background: none; padding: 0; border-radius: 0; color: inherit; }
+
+    /* Diagram / ASCII art box */
+    .diagram {
+      background: var(--code-bg);
+      border: 1px solid var(--code-border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: var(--text-secondary);
+      overflow-x: auto;
+      margin: 1.2rem 0;
+      white-space: pre;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin: 1rem 0;
+    }
+    .card h4 { margin-top: 0; }
+
+    /* Task list styling */
+    .task-item {
+      background: var(--bg-secondary);
+      border-left: 3px solid var(--accent);
+      padding: 0.75rem 1rem;
+      margin: 0.5rem 0;
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+
+    /* Sprint header */
+    .sprint-header {
+      background: linear-gradient(90deg, var(--accent-dim), transparent);
+      padding: 0.6rem 1rem;
+      border-radius: var(--radius);
+      margin: 2rem 0 1rem;
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 4rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border-color);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      text-align: center;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-primary); }
+    ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      .main-content { margin-left: 0; padding: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <h2>Spis treści</h2>
+  <nav>
+    <ul>
+      <li><a href="#sec1" class="toc-h2">1. Wprowadzenie i Cel</a></li>
+      <li><a href="#sec2" class="toc-h2">2. Design Aplikacji</a></li>
+      <li><a href="#sec2-1" class="toc-h3">2.1 Architektura Okna i Layout</a></li>
+      <li><a href="#sec2-2" class="toc-h3">2.2 Panel Projektu (Sidebar)</a></li>
+      <li><a href="#sec2-3" class="toc-h3">2.3 Panel Wątków (Thread List)</a></li>
+      <li><a href="#sec2-4" class="toc-h3">2.4 Panel Chatu (Główny)</a></li>
+      <li><a href="#sec2-5" class="toc-h3">2.5 Diff Viewer i Code Review</a></li>
+      <li><a href="#sec2-6" class="toc-h3">2.6 Zintegrowany Terminal</a></li>
+      <li><a href="#sec2-7" class="toc-h3">2.7 System Trybów Pracy</a></li>
+      <li><a href="#sec2-8" class="toc-h3">2.8 System Skili i Quick Actions</a></li>
+      <li><a href="#sec2-9" class="toc-h3">2.9 Integracja Git i PR</a></li>
+      <li><a href="#sec2-10" class="toc-h3">2.10 Ustawienia i Konfiguracja</a></li>
+      <li><a href="#sec3" class="toc-h2">3. Pełny Stack Technologiczny</a></li>
+      <li><a href="#sec3-1" class="toc-h3">3.1 Desktop Shell — Tauri v2</a></li>
+      <li><a href="#sec3-2" class="toc-h3">3.2 Frontend — React 19</a></li>
+      <li><a href="#sec3-3" class="toc-h3">3.3 Backend — Rust</a></li>
+      <li><a href="#sec3-4" class="toc-h3">3.4 Baza Danych — SQLite</a></li>
+      <li><a href="#sec3-5" class="toc-h3">3.5 AI / LLM Layer</a></li>
+      <li><a href="#sec3-6" class="toc-h3">3.6 Code Editor — Monaco</a></li>
+      <li><a href="#sec3-7" class="toc-h3">3.7 Terminal — xterm.js</a></li>
+      <li><a href="#sec3-8" class="toc-h3">3.8 Infrastruktura i DevOps</a></li>
+      <li><a href="#sec4" class="toc-h2">4. Architektura Systemu</a></li>
+      <li><a href="#sec5" class="toc-h2">5. Roadmap Projektowy</a></li>
+      <li><a href="#sec6" class="toc-h2">6. Szczegółowy Opis Sprintów</a></li>
+      <li><a href="#sec7" class="toc-h2">7. Wymagania Systemowe</a></li>
+    </ul>
+  </nav>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main-content">
+
+  <!-- HEADER -->
+  <header class="doc-header">
+    <div>
+      <span class="badge">WERSJA 2.0 — Desktop</span>
+      <span class="badge">DATA: 16.05.2026</span>
+      <span class="badge">TYP: Design + Stack + Roadmap</span>
+    </div>
+    <h1>AI Code Assistant Desktop App</h1>
+    <p class="meta">Kompletny design, stack technologiczny (Tauri v2) i szczegółowy roadmap dla aplikacji typu T3 Code / Codex</p>
+  </header>
+
+  <!-- ========== SECTION 1 ========== -->
+  <section id="sec1">
+    <h2>1. Wprowadzenie i Cel Aplikacji</h2>
+
+    <h3>Cel dokumentu</h3>
+    <p>Niniejszy dokument stanowi kompletny blueprint do stworzenia desktopowej aplikacji AI Code Assistant — narzędzia, które będzie Twoim prywatnym, lokalnym centrum dowodzenia do pracy z agentami AI kodującymi. Aplikacja jest inspirowana T3 Code (Theo) i OpenAI Codex App, ale budowana od zera jako Twoje własne rozwiązanie.</p>
+
+    <h3>Dla kogo jest ta aplikacja</h3>
+    <p>Dla Ciebie — solo developera, który chce mieć własne, prywatne narzędzie do pracy z AI kodującym. Nie zależy Ci na SaaS, subskrypcjach czy cloudzie. Chcesz aplikację desktopową, która:</p>
+    <ul>
+      <li>Działa lokalnie na Twoim komputerze (z możliwością cloud API gdy chcesz)</li>
+      <li>Łączy się z Twoimi własnymi kluczami API (BYOK — Bring Your Own Key)</li>
+      <li>Pozwala pracować nad wieloma projektami Git równocześnie</li>
+      <li>Izoluje zmiany AI w Git worktree (nie brudzi Twojego głównego workspace)</li>
+      <li>Pozwala uruchamiać wielu agentów równolegle na różnych zadaniach</li>
+      <li>Ma zintegrowany diff viewer do review zmian</li>
+      <li>Ma zintegrowany terminal do komend</li>
+    </ul>
+
+    <h3>Philosophia aplikacji</h3>
+    <p><strong>"Twoje AI, twoje klucze, twój kod, twoja maszyna."</strong> Aplikacja nie jest kolejnym SaaSem, który musisz subskrybować. Jest to lokalne narzędzie desktopowe — jak VS Code czy Terminal — które instalujesz raz i używasz bez ograniczeń. Płać tylko za API LLM (OpenAI/Anthropic) lub używaj darmowych lokalnych modeli (Ollama). Żadnych monthly fees, żadnych limitów, żadnego vendor lock-in.</p>
+
+    <h3>Form factor — Desktop App</h3>
+    <p>Aplikacja jest natywną aplikacją desktopową (nie webówka, nie PWA):</p>
+    <ul>
+      <li><strong>Okno główne:</strong> trzy-panelowy layout (projekty | wątki | chat)</li>
+      <li><strong>Multi-window:</strong> można otworzyć wiele okien (np. diff w osobnym oknie)</li>
+      <li><strong>System tray:</strong> działa w tle, szybki dostęp</li>
+      <li><strong>Global shortcut:</strong> <code>Cmd + Shift + C</code> (macOS) / <code>Ctrl + Shift + C</code> (Win/Linux) do otwarcia z dowolnego miejsca</li>
+      <li><strong>Auto-updater:</strong> aktualizacje bez reinstallu</li>
+      <li><strong>Bundle size:</strong> ~10-15 MB (vs 150MB+ Electron)</li>
+    </ul>
+  </section>
+
+  <!-- ========== SECTION 2 ========== -->
+  <section id="sec2">
+    <h2>2. Design Aplikacji — Co Powinna Zawierać</h2>
+    <p>Ta sekcja szczegółowo rozpisuje każdy element designu aplikacji — od ogólnego layoutu po najmniejsze komponenty. To Twój przewodnik po tym, co ma być zaimplementowane.</p>
+
+    <article id="sec2-1">
+      <h3>2.1. Architektura Okna i Layout</h3>
+
+      <h4>Główne Okno — Three-Panel Layout</h4>
+      <p>Aplikacja opiera się na trzech panelach podobnie jak T3 Code:</p>
+      <ul>
+        <li><strong>Lewy panel (SIDEBAR):</strong> lista projektów + nawigacja główna (min 200px, max 350px, resizable)</li>
+        <li><strong>Środkowy panel (THREADS):</strong> lista wątków/konwersacji dla wybranego projektu (min 250px, max 400px, resizable)</li>
+        <li><strong>Prawy panel (MAIN):</strong> obszar roboczy — chat, diff viewer, terminal (reszta dostępnej przestrzeni)</li>
+      </ul>
+      <p>Wszystkie panele są <strong>resizable</strong> (drag divider) i <strong>collapsible</strong> (można zwinąć każdy panel do ikon).</p>
+
+      <h4>Top Bar (Header)</h4>
+      <p>Pasek na samej górze okna (nad panelami):</p>
+      <ul>
+        <li><strong>Lewa strona:</strong> nazwa aplikacji + ikona, aktualny projekt (breadcrumb)</li>
+        <li><strong>Środek:</strong> nazwa aktywnego wątku, wskaźnik statusu agenta (idle/running/waiting)</li>
+        <li><strong>Prawa strona:</strong> selector modelu (dropdown), przycisk nowego wątku, przycisk ustawień (gear), przycisk minimalizacji/zamknięcia (native window controls)</li>
+      </ul>
+
+      <h4>Bottom Bar (Status Bar)</h4>
+      <p>Pasek statusu na dole okna:</p>
+      <ul>
+        <li><strong>Lewa strona:</strong> status połączenia (online/offline), wersja aplikacji</li>
+        <li><strong>Środek:</strong> aktualnie używany model (np. "gpt-5.2-codex"), liczba aktywnych agentów</li>
+        <li><strong>Prawa strona:</strong> token usage (input/output), koszt sesji (USD), liczba plików w kontekście</li>
+      </ul>
+
+      <h4>Native Window Controls</h4>
+      <ul>
+        <li><strong>macOS:</strong> traffic lights (zamknij/minimalizuj/maksymalizuj) po lewej, przezroczyste tło, vibrancy effect</li>
+        <li><strong>Windows:</strong> standardowe przyciski po prawej, Mica/Acrylic material</li>
+        <li><strong>Linux:</strong> standardowe GTK decorations, dark theme default</li>
+        <li><strong>Keyboard shortcuts:</strong>
+          <ul>
+            <li><code>Cmd/Ctrl + ,</code> — ustawienia</li>
+            <li><code>Cmd/Ctrl + N</code> — nowy wątek</li>
+            <li><code>Cmd/Ctrl + Shift + N</code> — nowy projekt</li>
+            <li><code>Cmd/Ctrl + T</code> — nowy wątek</li>
+            <li><code>Cmd/Ctrl + W</code> — zamknij wątek</li>
+            <li><code>Cmd/Ctrl + B</code> — pokaż/ukryj sidebar</li>
+          </ul>
+        </li>
+      </ul>
+    </article>
+
+    <article id="sec2-2">
+      <h3>2.2. Panel Projektu (Sidebar)</h3>
+
+      <h4>Sekcja Projekty</h4>
+      <p>Lewy sidebar zawiera:</p>
+      <ul>
+        <li><strong>Przycisk "Add Project":</strong> otwiera dialog (modal) do dodania projektu — można wybrać folder przez systemowy file picker lub wkleić ścieżkę absolutną</li>
+        <li><strong>Lista projektów:</strong> każdy projekt to "card" z:
+          <ul>
+            <li>Favicon/ikonka (z repozytorium lub generowana z pierwszej litery nazwy)</li>
+            <li>Nazwa projektu (bold)</li>
+            <li>Ścieżka (truncated, szary kolor)</li>
+            <li>Branch (np. "main", badge z kolorem)</li>
+            <li>Liczba aktywnych wątków (badge)</li>
+            <li>Status ostatniego wątku (checkmark, spinner, lub kropka)</li>
+          </ul>
+        </li>
+        <li><strong>Aktywny projekt</strong> jest podświetlony (primary color background + border-left)</li>
+        <li><strong>Kontekstowe menu</strong> (prawy przycisk myszy): Open in Finder/Explorer, Remove from list, Refresh git status, Open in VS Code</li>
+      </ul>
+
+      <h4>Sekcja Nawigacji (poniżej projektów)</h4>
+      <ul>
+        <li><strong>Skills:</strong> ikona + napis, prowadzi do managera skilli</li>
+        <li><strong>Settings:</strong> ikona + napis, prowadzi do ustawień aplikacji</li>
+        <li>separator (linia)</li>
+        <li><strong>Help &amp; About:</strong> ikona + napis</li>
+      </ul>
+    </article>
+
+    <article id="sec2-3">
+      <h3>2.3. Panel Wątków (Thread List)</h3>
+
+      <h4>Header Panelu Wątków</h4>
+      <ul>
+        <li>Nazwa projektu (bold) jako tytuł panelu</li>
+        <li>Przycisk "New Thread": plus icon, tworzy nowy wątek</li>
+        <li>Przycisk "Quick Actions": play icon, lista zdefiniowanych akcji</li>
+        <li>Search bar: filtrowanie wątków po nazwie/treści (debounced)</li>
+      </ul>
+
+      <h4>Lista Wątków</h4>
+      <p>Każdy wątek to "card" z:</p>
+      <ul>
+        <li>Ikona statusu: spinner (running), checkmark (completed), clock (pending), chat bubble (chat mode)</li>
+        <li>Tytuł wątku: auto-generowany z pierwszego promptu (np. "Add authentication middleware") lub manualnie edytowany</li>
+        <li>Podtytuł: data ostatniej aktywności (relative: "2 min ago") lub model użyty</li>
+        <li>Badge trybu: "Chat", "Plan", "Worktree" — kolorowe etykiety</li>
+        <li>Status PR: jeśli wątek zakończył się PR, pokazuje status (open/merged/closed) z ikonką GitHub</li>
+      </ul>
+
+      <h4>Grupowanie wątków</h4>
+      <ul>
+        <li>"Running" (aktywne, na górze)</li>
+        <li>"Today"</li>
+        <li>"Yesterday"</li>
+        <li>"This Week"</li>
+        <li>"Older"</li>
+      </ul>
+
+      <h4>Kontekstowe Menu Wątku</h4>
+      <ul>
+        <li>Rename</li>
+        <li>Duplicate (kopiuj wątek z tą samą konfiguracją)</li>
+        <li>Archive</li>
+        <li>Delete (z potwierdzeniem)</li>
+        <li>Copy link (do worktree/diff)</li>
+        <li>Open worktree in VS Code</li>
+      </ul>
+    </article>
+
+    <article id="sec2-4">
+      <h3>2.4. Panel Chatu (Główny)</h3>
+
+      <h4>Konfiguracja Wątku (nad chatem)</h4>
+      <p>Górna część panelu przed wiadomościami — konfiguracja dla tego wątku:</p>
+      <ul>
+        <li><strong>Model Selector:</strong> dropdown z dostępnymi modelami (OpenAI GPT-5.2, Claude 4 Sonnet, Claude 4 Opus, Ollama local). Zapisane per wątek.</li>
+        <li><strong>Mode Toggle:</strong> Chat mode | Plan mode (przycisk toggle/tab). Chat = szybkie pytania, Plan = agent najpierw robi plan przed pisaniem kodu.</li>
+        <li><strong>Access Level:</strong> Full Access | Supervised (toggle). Full = agent może pisać pliki bez pytania. Supervised = każda zmiana wymaga akceptacji.</li>
+        <li><strong>Reasoning Level:</strong> slider 1-5 (ile planowania agent robi przed działaniem)</li>
+        <li><strong>Worktree toggle:</strong> czy agent pracuje w izolowanym worktree</li>
+      </ul>
+
+      <h4>Obszar Wiadomości</h4>
+      <p>Scrollowalny obszar z listą wiadomości:</p>
+      <ul>
+        <li><strong>User Message:</strong> prawo, tło primary/10, avatar usera (inicjały), treść jako markdown</li>
+        <li><strong>Assistant Message:</strong> lewo, tło neutral, avatar AI (bot icon), treść jako markdown z code blocks</li>
+        <li><strong>Tool Call Message:</strong> lekki styl, ikona wrench, nazwa toolu (np. "read_file: src/auth.ts"), status (running/completed/error), expandable szczegóły</li>
+        <li><strong>Plan Message:</strong> specjalny format dla Plan mode — lista kroków z checkboxami, każdy krok może być expanded (pokazuje szczegóły)</li>
+        <li><strong>System Message:</strong> center, muted, italic (np. "Agent started worktree session on branch ai/feature-auth")</li>
+      </ul>
+
+      <h4>Code Blocks w Wiadomościach</h4>
+      <p>Każdy blok kodu w markdown ma:</p>
+      <ul>
+        <li><strong>Header:</strong> nazwa języka (badge) + nazwa pliku (jeśli podana) + Copy button</li>
+        <li><strong>Syntax Highlighting:</strong> Monaco Editor w read-only mode (albo Prism.js jako fallback)</li>
+        <li><strong>Line numbers:</strong> opcjonalne (toggle w ustawieniach)</li>
+        <li><strong>Diff highlighting:</strong> jeśli blok zawiera diff (linie z + i -), pokoloruj zielono/czerwono</li>
+        <li><strong>"Apply" button:</strong> jeśli code block to zmiana do pliku, przycisk "Apply to file" (aplikuje zmianę do repozytorium)</li>
+      </ul>
+
+      <h4>Input Area</h4>
+      <p>Na dole panelu chatu:</p>
+      <ul>
+        <li><strong>Textarea:</strong> auto-resize (min 1 linia, max 10 linii), placeholder: "Ask the agent to do something..."</li>
+        <li><strong>Attach button:</strong> paperclip icon, pozwala dołączyć pliki jako kontekst (drag &amp; drop też działa)</li>
+        <li><strong>Send button:</strong> arrow icon, wysyła wiadomość (disabled gdy empty)</li>
+        <li><strong>Stop button:</strong> square icon, pojawia się gdy agent generuje odpowiedź (przerywa generation)</li>
+        <li><strong>"@" mention:</strong> wpisanie "@" otwiera autocomplete z skillami i plikami projektu</li>
+        <li><strong>Keyboard:</strong> Enter = send, Shift + Enter = nowa linia</li>
+      </ul>
+    </article>
+
+    <article id="sec2-5">
+      <h3>2.5. Diff Viewer i Code Review</h3>
+
+      <h4>Diff Viewer</h4>
+      <p>Komponent do przeglądania zmian (jak GitHub diff):</p>
+      <ul>
+        <li><strong>Tryby widoku:</strong> Split (side-by-side) | Unified (jedna kolumna, jak git diff) — toggle w headerze</li>
+        <li><strong>Lista plików:</strong> sidebar po lewej z listą zmienionych plików (nazwa, liczba + i - linii)</li>
+        <li><strong>Code highlighting:</strong> dodane linie na zielono (+), usunięte na czerwono (-), kontekst normalnie</li>
+        <li><strong>Inline comments:</strong> można dodać komentarz do konkretnej linii (dla AI — "zmień to na...")</li>
+        <li><strong>"Stage chunk" button:</strong> przy każdym hunk diffa przycisk "Stage" (dodaje do commitu) lub "Revert" (cofa zmianę)</li>
+        <li><strong>Navigation:</strong> przyciski prev/next file, prev/next hunk</li>
+        <li><strong>Full file view:</strong> opcja "View full file" — pokazuje cały plik z podświetlonymi zmianami</li>
+      </ul>
+
+      <h4>Review Changes Panel</h4>
+      <p>Gdy agent zakończy pracę, pojawia się panel review:</p>
+      <ul>
+        <li><strong>Podsumowanie:</strong> ile plików zmienionych, ile + i - linii, lista zmian</li>
+        <li><strong>Commit message:</strong> auto-generowane przez AI (edytowalne)</li>
+        <li><strong>Przyciski akcji:</strong>
+          <ul>
+            <li><strong>Commit:</strong> zapisuje zmiany w worktree</li>
+            <li><strong>Commit &amp; Push:</strong> commit + push do remote</li>
+            <li><strong>Commit, Push &amp; Create PR:</strong> jednym kliknięciem — commit, push, otwiera przeglądarkę z nowym PR (pre-filled title i description)</li>
+            <li><strong>Discard:</strong> usuwa zmiany i worktree</li>
+            <li><strong>Continue:</strong> agent kontynuuje pracę (dodatkowe zmiany)</li>
+          </ul>
+        </li>
+      </ul>
+    </article>
+
+    <article id="sec2-6">
+      <h3>2.6. Zintegrowany Terminal</h3>
+
+      <h4>Terminal Panel</h4>
+      <p>Zintegrowany terminal na dole/do boku głównego panelu (jak VS Code):</p>
+      <ul>
+        <li><strong>xterm.js</strong> jako renderer (WebGL acceleration)</li>
+        <li><strong>Pty</strong> (pseudo-terminal) zarządzany przez Rust backend</li>
+        <li><strong>Shell:</strong> używa domyślnego shella użytkownika (zsh, bash, fish, powershell)</li>
+        <li><strong>Working directory:</strong> auto-ustawiane na root projektu (lub worktree)</li>
+        <li><strong>Tabs:</strong> można mieć wiele terminali (plus icon w headerze)</li>
+        <li><strong>Quick commands:</strong> przyciski do częstych komend (np. "npm test", "npm run build", "git status")</li>
+        <li><strong>AI integration:</strong> można wybrać tekst w terminalu i wysłać do AI jako prompt ("explain this error", "fix this")</li>
+      </ul>
+    </article>
+
+    <article id="sec2-7">
+      <h3>2.7. System Trybów Pracy</h3>
+
+      <h4>Chat Mode</h4>
+      <p>Tryb dla szybkich pytań i iteracji:</p>
+      <ul>
+        <li>Agent odpowiada bez planowania (direct response)</li>
+        <li>Nie tworzy planu, nie modyfikuje plików automatycznie</li>
+        <li>Może czytać pliki (jeśli pytanie o kod), ale nie pisze</li>
+        <li>Idealny do: "co robi ta funkcja?", "jak zaimplementować X?", "review tego kodu"</li>
+        <li>Streaming odpowiedzi token-by-token</li>
+      </ul>
+
+      <h4>Plan Mode</h4>
+      <p>Tryb dla złożonych zadań wymagających planowania:</p>
+      <ul>
+        <li>Agent najpierw analizuje codebase i generuje plan krok-po-kroku</li>
+        <li>Plan jest wyświetlany jako lista kroków z checkboxami</li>
+        <li>Użytkownik może edytować plan przed rozpoczęciem (dodawać/usuwać/zmieniać kroki)</li>
+        <li>Po akceptacji planu, agent wykonuje go krok po kroku</li>
+        <li>Każdy krok może być zatwierdzony indywidualnie (w trybie Supervised)</li>
+        <li>Idealny do: "dodaj system autentykacji", "zrefaktoryzuj ten moduł", "dodaj testy do X"</li>
+      </ul>
+
+      <h4>Worktree Mode</h4>
+      <p>Izolowane środowisko pracy:</p>
+      <ul>
+        <li>Agent pracuje w oddzielnym Git worktree (osobny katalog, osobny branch)</li>
+        <li>Twój główny workspace nie jest modyfikowany</li>
+        <li>Możesz kontynuować pracę na main branch podczas gdy agent pracuje na swoim branchu</li>
+        <li>Po zakończeniu: diff + review + merge/PR</li>
+        <li>Auto-cleanup: worktree jest usuwane po discard lub merge</li>
+      </ul>
+
+      <h4>Local Mode</h4>
+      <p>Praca bezpośrednio w repozytorium:</p>
+      <ul>
+        <li>Agent modyfikuje pliki bezpośrednio w Twoim workspace</li>
+        <li>Szybszy (brak overheadu worktree)</li>
+        <li>Ryzykowniejszy (brudzi workspace)</li>
+        <li>Recommended tylko w trybie Supervised</li>
+      </ul>
+    </article>
+
+    <article id="sec2-8">
+      <h3>2.8. System Skili i Quick Actions</h3>
+
+      <h4>Skills (Reusable Prompts)</h4>
+      <p>System gotowych, reuzywalnych promptów:</p>
+      <ul>
+        <li><strong>Definicja skilla:</strong> nazwa, opis, system prompt, dostępne tool'e, model</li>
+        <li><strong>Wbudowane skille:</strong>
+          <ul>
+            <li><code>@react-component</code> — "Stwórz komponent React z TypeScript"</li>
+            <li><code>@api-endpoint</code> — "Dodaj endpoint API z walidacją"</li>
+            <li><code>@test-writer</code> — "Napisz testy jednostkowe dla tej funkcji"</li>
+            <li><code>@refactor</code> — "Zrefaktoryzuj ten kod"</li>
+            <li><code>@docs</code> — "Wygeneruj dokumentację dla tego modułu"</li>
+            <li><code>@security</code> — "Przeskanuj kod pod kątem bezpieczeństwa"</li>
+            <li><code>@optimize</code> — "Zoptymalizuj wydajność tego kodu"</li>
+          </ul>
+        </li>
+        <li><strong>Użycie:</strong> wpisz <code>@nazwa-skilla</code> w inpucie chatu, auto-complete pokazuje dostępne skille</li>
+        <li><strong>Custom skille:</strong> można tworzyć własne skille w managerze (Settings &gt; Skills)</li>
+        <li><strong>Skill Manager:</strong> lista skilli z opisem, edytor promptów, test playground</li>
+      </ul>
+
+      <h4>Quick Actions</h4>
+      <p>Przyciski do natychmiastowego wykonania komendy shell:</p>
+      <ul>
+        <li><strong>Definicja:</strong> nazwa, komenda shell, keybinding (opcjonalny), auto-run flag</li>
+        <li><strong>Przykłady:</strong> "Run Dev Server" (<code>npm run dev</code>), "Run Tests" (<code>npm test</code>), "Format" (<code>npm run format</code>), "Lint" (<code>npm run lint</code>)</li>
+        <li><strong>Auto-run:</strong> można ustawić, żeby komenda uruchamiała się automatycznie po utworzeniu worktree (np. <code>npm install</code>)</li>
+        <li><strong>UI:</strong> przyciski w toolbarze wątku, można dodawać/edytować/usuwać</li>
+      </ul>
+    </article>
+
+    <article id="sec2-9">
+      <h3>2.9. Integracja Git i PR</h3>
+
+      <h4>Git Operations</h4>
+      <ul>
+        <li><strong>Auto-detekcja:</strong> każdy projekt jest skanowany pod kątem repozytorium Git</li>
+        <li><strong>Branch indicator:</strong> w sidebarze przy projekcie — aktualny branch</li>
+        <li><strong>Git status:</strong> ile zmienionych plików, ile staged, ile untracked — badge</li>
+        <li><strong>Commit:</strong> auto-generowany message (przez AI) lub manualny, modal z listą zmian</li>
+        <li><strong>Push:</strong> push do remote z obsługą błędów</li>
+        <li><strong>Create PR:</strong> otwiera przeglądarkę z pre-filled PR (title, description z changes summary)</li>
+      </ul>
+
+      <h4>Worktree Management</h4>
+      <ul>
+        <li><strong>Auto-create:</strong> przy tworzeniu wątku w worktree mode, auto tworzy branch <code>ai/[nazwa-wątku]</code></li>
+        <li><strong>Auto-cleanup:</strong> przy discard wątku, usuwa worktree i branch</li>
+        <li><strong>Worktree list:</strong> można zobaczyć wszystkie worktree w ustawieniach projektu</li>
+      </ul>
+    </article>
+
+    <article id="sec2-10">
+      <h3>2.10. Ustawienia i Konfiguracja</h3>
+
+      <h4>Settings Pages</h4>
+      <ul>
+        <li><strong>General:</strong> język UI, theme (dark/light/system), font size, line height</li>
+        <li><strong>AI Models:</strong> lista skonfigurowanych modeli — dodawanie API keys (OpenAI, Anthropic), konfiguracja Ollama (URL, modele), default model per project</li>
+        <li><strong>Skills:</strong> manager skilli — lista, edytor, test playground, import/export</li>
+        <li><strong>Projects:</strong> lista dodanych projektów, default settings per project</li>
+        <li><strong>Keyboard Shortcuts:</strong> konfiguracja skrótów klawiszowych</li>
+        <li><strong>Advanced:</strong> max tokens, temperature default, timeouty, log level, data directory</li>
+      </ul>
+    </article>
+  </section>
+
+
+  <!-- ========== SECTION 3 ========== -->
+  <section id="sec3">
+    <h2>3. Pełny Stack Technologiczny</h2>
+    <p>Stack oparty na <strong>Tauri v2</strong> — frameworku do budowy desktop apps z React frontend i Rust backend. Zamiast Electron (120MB+), Tauri używa systemowego webview (WKWebView/WebView2/WebKitGTK) — aplikacja zajmuje ~10-15 MB.</p>
+
+    <article id="sec3-1">
+      <h3>3.1. Desktop Shell — Tauri v2</h3>
+      <table>
+        <thead>
+          <tr><th>Komponent</th><th>Technologia</th><th>Rola</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Desktop Shell</td><td>Tauri v2</td><td>Okna, IPC, system tray, menu, auto-updater, native APIs</td></tr>
+          <tr><td>Window Manager</td><td>tao (Tauri)</td><td>Tworzenie okien, multi-window, window state</td></tr>
+          <tr><td>WebView</td><td>WRY (Tauri)</td><td>Renderer: WKWebView (macOS), WebView2 (Win), WebKitGTK (Linux)</td></tr>
+          <tr><td>Auto Updater</td><td>tauri-plugin-updater</td><td>Aktualizacje OTA, cryptographic signatures</td></tr>
+          <tr><td>System Tray</td><td>tauri-plugin-tray</td><td>Ikona w trayu, menu kontekstowe</td></tr>
+          <tr><td>Global Shortcuts</td><td>tauri-plugin-globalshortcut</td><td>Cmd+Shift+C do otwarcia z dowolnego miejsca</td></tr>
+          <tr><td>Notifications</td><td>tauri-plugin-notification</td><td>Natywne powiadomienia OS (agent zakończył pracę)</td></tr>
+          <tr><td>Deep Links</td><td>tauri-plugin-deep-link</td><td>Protocol handler (codex://) dla linków z przeglądarki</td></tr>
+          <tr><td>Store</td><td>tauri-plugin-store</td><td>Key-value store dla ustawień aplikacji</td></tr>
+          <tr><td>Single Instance</td><td>tauri-plugin-singleinstance</td><td>Tylko jedna instancja aplikacji</td></tr>
+          <tr><td>Dialog</td><td>tauri-plugin-dialog</td><td>Natywne okna dialogowe (file picker, confirm, message)</td></tr>
+          <tr><td>FS (sandboxed)</td><td>tauri-plugin-fs</td><td>Dostęp do systemu plików (scoped do wybranych folderów)</td></tr>
+          <tr><td>Shell</td><td>tauri-plugin-shell</td><td>Wykonywanie komend shell (git, npm, itp.)</td></tr>
+          <tr><td>HTTP</td><td>tauri-plugin-http</td><td>Requesty HTTP do API (OpenAI, Anthropic, Ollama)</td></tr>
+          <tr><td>Clipboard</td><td>tauri-plugin-clipboardmanager</td><td>Kopiowanie kodu, tekstu</td></tr>
+          <tr><td>OS</td><td>tauri-plugin-os</td><td>Info o systemie operacyjnym</td></tr>
+        </tbody>
+      </table>
+    </article>
+
+    <article id="sec3-2">
+      <h3>3.2. Frontend — React 19</h3>
+      <table>
+        <thead>
+          <tr><th>Technologia</th><th>Wersja</th><th>Rola</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>React</td><td>19.x</td><td>UI framework — Server Components, Actions, use()</td></tr>
+          <tr><td>TypeScript</td><td>5.6+</td><td>Type safety end-to-end</td></tr>
+          <tr><td>Vite</td><td>6.x</td><td>Build tool (Tauri integruje się natywnie z Vite)</td></tr>
+          <tr><td>Tailwind CSS</td><td>4.x</td><td>Utility-first CSS</td></tr>
+          <tr><td>shadcn/ui</td><td>latest</td><td>Komponenty UI (Dialog, Tabs, Resizable, Dropdown, itp.)</td></tr>
+          <tr><td>Zustand</td><td>5.x</td><td>State management (global store)</td></tr>
+          <tr><td>TanStack Query</td><td>5.x</td><td>Server state management (cache, refetch)</td></tr>
+          <tr><td>TanStack Virtual</td><td>3.x</td><td>Wirtualizacja długich list (wątki, wiadomości)</td></tr>
+          <tr><td>Framer Motion</td><td>12.x</td><td>Animacje (paneli, przejść, streaming tokens)</td></tr>
+          <tr><td>React Markdown</td><td>9.x</td><td>Renderowanie markdown w wiadomościach</td></tr>
+          <tr><td>Prism.js / Shiki</td><td>latest</td><td>Syntax highlighting w markdown</td></tr>
+          <tr><td>Monaco Editor</td><td>0.50+</td><td>Code editor (VS Code editor w przeglądarce)</td></tr>
+          <tr><td>xterm.js</td><td>5.x</td><td>Terminal emulator (WebGL renderer)</td></tr>
+          <tr><td>React Diff Viewer</td><td>4.x</td><td>Diff viewer (split/unified)</td></tr>
+          <tr><td>Zod</td><td>3.24+</td><td>Walidacja schematów</td></tr>
+        </tbody>
+      </table>
+    </article>
+
+    <article id="sec3-3">
+      <h3>3.3. Backend — Rust</h3>
+      <table>
+        <thead>
+          <tr><th>Technologia</th><th>Crate</th><th>Rola</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Async Runtime</td><td>tokio</td><td>Async runtime (commands, I/O, background tasks)</td></tr>
+          <tr><td>Serialization</td><td>serde + serde_json</td><td>JSON serialization dla IPC (JS &lt;-&gt; Rust)</td></tr>
+          <tr><td>Errors</td><td>thiserror + anyhow</td><td>Type-safe error handling</td></tr>
+          <tr><td>Git Operations</td><td>git2</td><td>Natywne operacje Git (libgit2 bindings) — branch, commit, worktree, diff, status</td></tr>
+          <tr><td>Process Management</td><td>tokio::process</td><td>Spawnowanie procesów (shell, npm, itp.)</td></tr>
+          <tr><td>Pty</td><td>portable-pty</td><td>Pseudo-terminal dla zintegrowanego terminala</td></tr>
+          <tr><td>SQLite</td><td>rusqlite + deadpool-sqlite</td><td>Embedded database (connection pooling)</td></tr>
+          <tr><td>HTTP Client</td><td>reqwest</td><td>HTTP client do API (OpenAI, Anthropic, Ollama)</td></tr>
+          <tr><td>LLM Streaming</td><td>eventsource-stream + futures</td><td>SSE streaming z API LLM</td></tr>
+          <tr><td>File Watching</td><td>notify</td><td>Monitoring zmian w plikach projektu (inotify/FSEvents)</td></tr>
+          <tr><td>Path Utils</td><td>dunce</td><td>Normalizacja ścieżek cross-platform</td></tr>
+          <tr><td>Regex</td><td>regex</td><td>Parsowanie outputu komend</td></tr>
+          <tr><td>Logging</td><td>tracing + tracing-subscriber</td><td>Structured logging (do pliku + frontend)</td></tr>
+          <tr><td>Configuration</td><td>confy</td><td>Zarządzanie configiem aplikacji</td></tr>
+        </tbody>
+      </table>
+    </article>
+
+    <article id="sec3-4">
+      <h3>3.4. Baza Danych — SQLite</h3>
+      <table>
+        <thead>
+          <tr><th>Tabela</th><th>Pola Kluczowe</th><th>Cel</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>projects</td><td>id, name, path, git_branch, git_remote, created_at</td><td>Lista projektów/dodanych repozytoriów</td></tr>
+          <tr><td>threads</td><td>id, project_id, title, mode, model, status, worktree_path, branch_name, reasoning_level, created_at, updated_at</td><td>Wątki konwersacji/agentów</td></tr>
+          <tr><td>messages</td><td>id, thread_id, role, content, metadata (JSON), tokens_input, tokens_output, created_at</td><td>Wiadomości w wątku</td></tr>
+          <tr><td>skills</td><td>id, name, description, system_prompt, tools, model, is_builtin, created_at</td><td>Reusable prompts</td></tr>
+          <tr><td>quick_actions</td><td>id, project_id, name, command, keybinding, auto_run, created_at</td><td>Szybkie komendy shell</td></tr>
+          <tr><td>settings</td><td>key, value</td><td>Ustawienia aplikacji (key-value)</td></tr>
+          <tr><td>api_keys</td><td>provider, key_encrypted, created_at</td><td>Zaszyfrowane klucze API (AES-256)</td></tr>
+          <tr><td>usage_stats</td><td>id, date, provider, model, tokens_input, tokens_output, cost_usd</td><td>Statystyki użycia</td></tr>
+        </tbody>
+      </table>
+    </article>
+
+    <article id="sec3-5">
+      <h3>3.5. AI / LLM Layer</h3>
+      <table>
+        <thead>
+          <tr><th>Komponent</th><th>Technologia</th><th>Rola</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>LLM Providers</td><td>OpenAI API, Anthropic API, Ollama API</td><td>Modele językowe — użytkownik podaje własne klucze</td></tr>
+          <tr><td>Streaming</td><td>SSE (Server-Sent Events)</td><td>Token-by-token streaming przez reqwest + eventsource</td></tr>
+          <tr><td>Local LLM</td><td>Ollama (localhost:11434)</td><td>Darmowe lokalne modele (Llama, Mistral, CodeLlama, DeepSeek)</td></tr>
+          <tr><td>Context Builder</td><td>Custom Rust</td><td>Składanie kontekstu: system prompt + attached files + repo context + history</td></tr>
+          <tr><td>Token Counter</td><td>tiktoken-rs (OpenAI) / estimate (inny)</td><td>Liczenie tokenów przed wysłaniem (nie przekroczyć limitu context window)</td></tr>
+          <tr><td>Encryption</td><td>aes-gcm</td><td>Szyfrowanie kluczy API w SQLite (AES-256-GCM)</td></tr>
+        </tbody>
+      </table>
+    </article>
+
+    <article id="sec3-6">
+      <h3>3.6. Code Editor — Monaco</h3>
+      <table>
+        <thead>
+          <tr><th>Komponent</th><th>Opis</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Monaco Editor</td><td>VS Code editor w przeglądarce (webpack/vite plugin)</td></tr>
+          <tr><td>Language Support</td><td>TypeScript, JavaScript, Python, Go, Rust, JSON, YAML, Markdown (wiele języków)</td></tr>
+          <tr><td>Themes</td><td>VS Code themes: Dark+ (default), Light+, Monokai, Dracula</td></tr>
+          <tr><td>Features</td><td>Syntax highlighting, error squiggles, hover info, go-to-definition (lokalne), minimap, line numbers</td></tr>
+          <tr><td>Diff Editor</td><td>Monaco diff editor dla porównywania plików (original vs modified)</td></tr>
+          <tr><td>Inline Edit</td><td>Edycja inline w diff viewer (można zmieniać kod przed approval)</td></tr>
+        </tbody>
+      </table>
+    </article>
+
+    <article id="sec3-7">
+      <h3>3.7. Terminal — xterm.js</h3>
+      <table>
+        <thead>
+          <tr><th>Komponent</th><th>Technologia</th><th>Rola</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Terminal Frontend</td><td>xterm.js 5.x</td><td>Renderer terminala (WebGL addon dla wydajności)</td></tr>
+          <tr><td>Fit Addon</td><td>xterm-addon-fit</td><td>Auto-dopasowanie do kontenera</td></tr>
+          <tr><td>WebLinks Addon</td><td>xterm-addon-weblinks</td><td>Klikalne linki w terminalu</td></tr>
+          <tr><td>Search Addon</td><td>xterm-addon-search</td><td>Szukanie w terminalu</td></tr>
+          <tr><td>Pty Backend</td><td>portable-pty (Rust)</td><td>Pseudo-terminal zarządzany przez Rust</td></tr>
+          <tr><td>Shell</td><td>System shell</td><td>zsh/bash/fish (macOS/Linux), PowerShell/Git Bash (Windows)</td></tr>
+        </tbody>
+      </table>
+    </article>
+
+    <article id="sec3-8">
+      <h3>3.8. Infrastruktura i DevOps</h3>
+      <table>
+        <thead>
+          <tr><th>Komponent</th><th>Technologia</th><th>Rola</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Build</td><td>Tauri CLI + Vite</td><td><code>cargo tauri build</code> — buduje dla wszystkich platform</td></tr>
+          <tr><td>CI/CD</td><td>GitHub Actions</td><td>Automated builds: macOS (universal), Windows, Linux (AppImage + deb)</td></tr>
+          <tr><td>Updater Server</td><td>GitHub Releases + JSON</td><td>Static JSON manifest dla Tauri auto-updater</td></tr>
+          <tr><td>Signing</td><td>Apple Developer ID, Windows EV cert</td><td>Podpisywanie binarek (wymagane dla auto-updatera)</td></tr>
+          <tr><td>Distribution</td><td>GitHub Releases</td><td>.dmg (macOS), .msi/.exe (Windows), .AppImage/.deb (Linux)</td></tr>
+          <tr><td>Package Size</td><td>Tauri optimization</td><td>~10-15 MB (vs 150MB+ Electron)</td></tr>
+        </tbody>
+      </table>
+    </article>
+  </section>
+
+  <!-- ========== SECTION 4 ========== -->
+  <section id="sec4">
+    <h2>4. Architektura Systemu</h2>
+
+    <h3>Diagram Architektury</h3>
+    <div class="diagram">
+┌─────────────────────────────────────────────────────────────────────┐
+│                    TWOJA APLIKACJA DESKTOPOWA                       │
+├──────────────────────────┬──────────────────────────────────────────┤
+│      FRONTEND (React)    │         BACKEND (Rust)                   │
+│  ┌──────────────────┐    │  ┌─────────────────────────────────────┐ │
+│  │ Three-panel UI   │    │  │ Tauri Commands (invoke)             │ │
+│  │ Monaco Editor    │◄───┼──┤ Git Manager (git2)                  │ │
+│  │ xterm.js Terminal│    │  │ LLM Client (reqwest+SSE)            │ │
+│  │ Diff Viewer      │    │  │ SQLite DB (rusqlite)                │ │
+│  │ Chat/Plan UI     │    │  │ File Watcher (notify)               │ │
+│  │ Settings         │    │  │ Process Manager (tokio)             │ │
+│  │ System Tray      │    │  │ Pty Manager                         │ │
+│  └──────────────────┘    │  └─────────────────────────────────────┘ │
+│           │              │                    │                     │
+│           └──────────────┴────────────────────┘                     │
+│                      invoke() / events                              │
+│              Tauri v2 Runtime (IPC, Window, OS APIs)                │
+├──────────────────────────┬──────────────────────────────────────────┤
+│       OS WebView         │              OS APIs                     │
+│   (WKWebView/            │  - File System                           │
+│    WebView2/             │  - Shell (git)                           │
+│    WebKitGTK)            │  - Notifications                         │
+│                          │  - System Tray                           │
+└──────────────────────────┴──────────────────────────────────────────┘
+                           │
+                           ▼
+              ┌────────────────────────────┐
+              │    EXTERNAL APIs             │
+              │  (user's own keys)           │
+              │  - OpenAI API (GPT-5.2)      │
+              │  - Anthropic API (Claude 4)  │
+              │  - Ollama (localhost:11434)  │
+              │  - GitHub API (optional)     │
+              └────────────────────────────┘
+    </div>
+
+    <h3>Kluczowe Komponenty Rust (Backend)</h3>
+    <table>
+      <thead>
+        <tr><th>Moduł</th><th>Opis</th><th>Kluczowe Funkcje</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>git_manager</td><td>Operacje Git przez git2</td><td>init, status, branch, worktree_create, worktree_delete, commit, diff, log</td></tr>
+        <tr><td>llm_client</td><td>Klient API dla LLM</td><td>stream_chat, count_tokens, format_messages, handle_sse_stream</td></tr>
+        <tr><td>db</td><td>SQLite database</td><td>CRUD projects, threads, messages, skills, settings</td></tr>
+        <tr><td>file_watcher</td><td>Monitoring plików</td><td>watch_project, on_change callback, debounced events</td></tr>
+        <tr><td>process_manager</td><td>Zarządzanie procesami</td><td>spawn_shell, kill_process, read_output, write_input</td></tr>
+        <tr><td>pty_manager</td><td>Pseudo-terminal</td><td>create_pty, resize, write, read_stream</td></tr>
+        <tr><td>crypto</td><td>Szyfrowanie</td><td>encrypt_api_key, decrypt_api_key (AES-256-GCM)</td></tr>
+        <tr><td>config</td><td>Konfiguracja</td><td>load_settings, save_settings, defaults</td></tr>
+        <tr><td>tray</td><td>System tray</td><td>setup_tray, handle_events, show/hide window</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Flow Danych (Przykład)</h3>
+    <p>Użytkownik wysyła prompt w chatcie:</p>
+    <ol>
+      <li><strong>Frontend (React):</strong> <code>sendMessage(content, threadId)</code> wywołuje <code>invoke("llm_chat", payload)</code></li>
+      <li><strong>Tauri IPC:</strong> serializuje payload do JSON, przesyła do Rust</li>
+      <li><strong>Rust llm_chat command:</strong>
+        <ol type="a">
+          <li>pobiera historię z SQLite,</li>
+          <li>buduje kontekst (system prompt + attached files),</li>
+          <li>liczy tokeny,</li>
+          <li>wysyła request HTTP do API (OpenAI/Anthropic/Ollama) z streaming (SSE)</li>
+        </ol>
+      </li>
+      <li><strong>Rust streamuje odpowiedź:</strong> każdy token jest wysyłany jako event przez <code>app_handle.emit("llm_token", token)</code></li>
+      <li><strong>Tauri IPC:</strong> event jest przesyłany do frontendu</li>
+      <li><strong>Frontend (React):</strong> odbiera event przez <code>listen("llm_token", handler)</code> i appenduje token do wiadomości</li>
+      <li><strong>Po zakończeniu:</strong> Rust zapisuje pełną odpowiedź do SQLite</li>
+    </ol>
+  </section>
+
+
+  <!-- ========== SECTION 5 ========== -->
+  <section id="sec5">
+    <h2>5. Roadmap Projektowy</h2>
+    <p>Roadmap podzielony na 6 faz i 16 sprintów (każdy sprint = 2 tygodnie). Całkowity czas: 32 tygodnie (8 miesięcy). Dla solo developera pracującego w wolnym czasie — realistyczna timeline.</p>
+
+    <table>
+      <thead>
+        <tr><th>Faza</th><th>Sprinty</th><th>Czas</th><th>Cel</th><th>MVP?</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Faza 0: Setup</strong></td><td>1</td><td>2 tyg.</td><td>Scaffold Tauri v2 + React, tooling</td><td>—</td></tr>
+        <tr><td><strong>Faza 1: Core UI</strong></td><td>2-3</td><td>4 tyg.</td><td>Three-panel layout, resizable panels</td><td>—</td></tr>
+        <tr><td><strong>Faza 2: Chat AI</strong></td><td>4-5</td><td>4 tyg.</td><td>Chat streaming, markdown, code blocks</td><td><strong>MVP v1</strong></td></tr>
+        <tr><td><strong>Faza 3: Projekty + Git</strong></td><td>6-7</td><td>4 tyg.</td><td>Project management, git integration</td><td><strong>MVP v2</strong></td></tr>
+        <tr><td><strong>Faza 4: Agenci + Worktree</strong></td><td>8-10</td><td>6 tyg.</td><td>Plan mode, git worktree, diff viewer</td><td><strong>Beta</strong></td></tr>
+        <tr><td><strong>Faza 5: Terminal + Skille</strong></td><td>11-13</td><td>6 tyg.</td><td>Terminal, skills, quick actions</td><td>—</td></tr>
+        <tr><td><strong>Faza 6: Hardening</strong></td><td>14-16</td><td>6 tyg.</td><td>Auto-updater, polish, release</td><td><strong>v1.0</strong></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ========== SECTION 6 ========== -->
+  <section id="sec6">
+    <h2>6. Szczegółowy Opis Sprintów</h2>
+
+    <!-- FAZA 0 -->
+    <h3>Faza 0: Setup i Scaffold <span style="color:var(--success)">✅ ZROBIONE</span></h3>
+    <p><strong>Sprint 1 | Tydzień 1-2 | Cel:</strong> Projekt Electron + React + TS + Vite gotowy do developmentu</p>
+
+    <div class="sprint-header">Sprint 1: Project Scaffold</div>
+    <p><em>Tydzień 1-2 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 1.1:</strong> Inicjalizacja Electron + React + TS + Vite <span style="color:var(--success)">✅</span></div>
+    <p>Utworzenie projektu przez <code>npm create tauri-app@latest</code> z wybranymi opcjami: React, TypeScript, Vite. Struktura katalogów: <code>src/</code> (frontend React), <code>src-tauri/</code> (backend Rust). Weryfikacja: <code>cargo tauri dev</code> uruchamia aplikację z hot-reload. Konfiguracja <code>tauri.conf.json</code>: window size (1400x900), title bar style (overlay dla macOS), allowlist capabilities (fs, shell, http, dialog, notification, clipboard, os, process).</p>
+
+    <div class="task-item"><strong>TASK 1.2:</strong> Konfiguracja Frontend Tooling <span style="color:var(--success)">✅</span></div>
+    <p>Instalacja i konfiguracja: Tailwind CSS 4 z <code>@tailwindcss/vite</code>, shadcn/ui (init + pierwsze komponenty: Button, Input, Dialog, Tabs, ScrollArea, DropdownMenu, Tooltip, Resizable), Zustand (global store), Framer Motion. Setup aliasów importów w <code>vite.config.ts</code> (<code>@/</code> → <code>src/</code>) i <code>tsconfig.json</code>. Konfiguracja ESLint + Prettier z auto-formatowaniem na save.</p>
+
+    <div class="task-item"><strong>TASK 1.3:</strong> Konfiguracja Backend Tooling (Electron IPC) <span style="color:var(--success)">✅</span></div>
+    <p>Dodanie dependencies do <code>Cargo.toml</code>: tokio (async runtime), serde + serde_json (serialization), thiserror (errors), rusqlite (SQLite), reqwest (HTTP client), git2 (Git), notify (file watcher). Struktura modułów w <code>src-tauri/src/</code>: <code>main.rs</code>, <code>lib.rs</code>, <code>db.rs</code>, <code>git.rs</code>, <code>llm.rs</code>, <code>fs_watcher.rs</code>. Setup tracing do logowania.</p>
+
+    <div class="task-item"><strong>TASK 1.4:</strong> SQLite Schema i Migrations (8 tabel, 7 skilli) <span style="color:var(--success)">✅</span></div>
+    <p>Stworzenie schematu SQLite z tabelami: <code>projects</code>, <code>threads</code>, <code>messages</code>, <code>skills</code>, <code>quick_actions</code>, <code>settings</code>, <code>api_keys</code>, <code>usage_stats</code>. System migracji: <code>db/migrations/001_init.sql</code> — pliki SQL aplikowane sekwencyjnie przy starcie aplikacji. Rust <code>db.rs</code>: inicjalizacja połączenia, wykonywanie migracji, podstawowe CRUD funkcje. Db path: <code>app_data_dir/db.sqlite</code> (Tauri appDataDir).</p>
+
+    <div class="task-item"><strong>TASK 1.5:</strong> System Tray i Okno <span style="color:var(--success)">✅</span></div>
+    <p>Konfiguracja system tray: ikona aplikacji, menu kontekstowe ("Open", "Settings", "Quit"). Event handling: kliknięcie w ikonę pokazuje/chowa okno. Blokowanie domyślnego zamknięcia (close → hide, quit → exit). Global shortcut: <code>Cmd/Ctrl + Shift + C</code> do pokazania okna z dowolnego miejsca. Single instance lock (tylko jedna kopia aplikacji).</p>
+
+    <h4>Kryteria Akceptacji Sprintu 1 <span style="color:var(--success)">✅</span></h4>
+    <ul>
+      <li>Aplikacja się kompiluje i uruchamia (<code>npm run dev</code> + <code>npm run electron</code>)</li>
+      <li>System tray działa (ikona, menu, show/hide)</li>
+      <li>SQLite jest inicjalizowany z pełnym schematem</li>
+      <li>Global shortcut otwiera okno</li>
+      <li>Hot-reload działa dla frontend i backend</li>
+    </ul>
+
+    <!-- FAZA 1 -->
+    <h3>Faza 1: Core UI Layout <span style="color:var(--success)">✅ ZROBIONE</span></h3>
+    <p><strong>Sprint 2-3 | Tydzień 3-6 | Cel:</strong> Three-panel layout, nawigacja, resizable panels</p>
+
+    <div class="sprint-header">Sprint 2: Three-Panel Layout <span style="color:var(--success)">✅</span></div>
+    <p><em>Tydzień 3-4 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 2.1:</strong> Resizable Panel Container (react-resizable-panels) ✅</div>
+    <p>Implementacja trzech-panelowego layoutu z shadcn/ui Resizable (lub react-resizable-panels): lewy panel (Projects, min 200px, max 350px), środkowy panel (Threads, min 250px, max 400px), prawy panel (Main Content, flex-1). Panele są resizable (drag dividers) i collapsible (przyciski zwiń/rozwiń). Persist state: rozmiary paneli zapisywane w localStorage i odtwarzane przy starcie.</p>
+
+    <div class="task-item"><strong>TASK 2.2:</strong> Project Sidebar z context menu ✅</div>
+    <p>Komponent <code>ProjectSidebar</code>: lista projektów z SQLite (mock dane na start). Każdy projekt: favicon/icon (generowana z pierwszej litery), nazwa (bold), ścieżka (truncated, gray), branch (badge). Przycisk "Add Project" — wywołuje Tauri <code>dialog.open</code> (folder picker) i zapisuje do SQLite. Aktywny projekt: podświetlenie primary color + border-left. Context menu (prawy klawisz): Remove, Refresh git status, Open in VS Code (przez <code>shell.open</code>). Pusta lista: "No projects yet" + CTA "Add your first project".</p>
+
+    <div class="task-item"><strong>TASK 2.3:</strong> Thread List z grupowaniem i context menu ✅</div>
+    <p>Komponent <code>ThreadList</code>: lista wątków dla wybranego projektu (z SQLite, mock dane). Każdy wątek: ikona statusu, tytuł, podtytuł (data/model), badge trybu (Chat/Plan). Grupowanie: "Running", "Today", "Yesterday", "This Week", "Older". Przycisk "New Thread" — tworzy nowy wątek w SQLite i przełącza do niego. Search bar do filtrowania wątków. Pusta lista: placeholder z CTA.</p>
+
+    <div class="task-item"><strong>TASK 2.4:</strong> Main Panel z Tabami (Chat, Diff, Terminal) ✅</div>
+    <p>Komponent <code>MainPanel</code>: obszar roboczy z tabami (shadcn Tabs): "Chat", "Diff", "Terminal". Domyślnie "Chat" (pusty placeholder na razie). Header z nazwą wątku, modelem (badge), i przyciskami (New Thread, Settings). Bottom bar (status): wersja app, połączenie, token usage (placeholder).</p>
+
+    <div class="task-item"><strong>TASK 2.5:</strong> Top Bar i Status Bar z model selector ✅</div>
+    <p><strong>TopBar</strong>: nazwa aplikacji + ikona, breadcrumb (Project / Thread), przycisk nowego wątku, selector modelu (dropdown placeholder), settings gear.<br><strong>StatusBar</strong>: lewa strona (status online/offline), środek (aktualny model, liczba aktywnych agentów), prawa strona (token usage placeholder). Sticky na dole okna.</p>
+
+    <h4>Kryteria Akceptacji Sprintu 2</h4>
+    <ul>
+      <li>Trzy-panele są widoczne i resizable (drag dividers)</li>
+      <li>Można dodać projekt przez folder picker (zapisuje do SQLite)</li>
+      <li>Lista projektów i wątków jest wyświetlana z bazy danych</li>
+      <li>Można tworzyć nowe wątki</li>
+      <li>Panele można zwijać/rozwijać</li>
+    </ul>
+
+    <div class="sprint-header">Sprint 3: UI Polish i Theme</div>
+    <p><em>Tydzień 5-6 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 3.1:</strong> Dark/Light Theme</div>
+    <p>Implementacja systemu themingu przez next-themes (lub custom): dark (default), light, system. Kolory dostosowane do obu motywów. Native window decorations: macOS (vibrancy, transparent titlebar), Windows (Mica material). Persist theme w Tauri Store. Toggle w settings.</p>
+
+    <div class="task-item"><strong>TASK 3.2:</strong> Native Window Controls</div>
+    <p>macOS: traffic lights po lewej, titlebar hidden (overlay style), vibrancy effect. Windows: standardowe kontrolki, custom titlebar dla spójności. Linux: GTK decorations. Keyboard shortcuts: <code>Cmd/Ctrl + ,</code> (settings), <code>Cmd/Ctrl + N</code> (nowy wątek), <code>Cmd/Ctrl + Shift + N</code> (nowy projekt), <code>Cmd/Ctrl + B</code> (toggle sidebar). Skróty konfigurowalne w settings.</p>
+
+    <div class="task-item"><strong>TASK 3.3:</strong> Settings UI</div>
+    <p>Strona ustawień (modal lub osobny widok): General (theme, font size), AI Models (lista skonfigurowanych — placeholder), Skills (placeholder), Projects (lista, można usuwać), Keyboard Shortcuts (placeholder), Advanced (placeholder). Zapis ustawień do SQLite + Tauri Store.</p>
+
+    <div class="task-item"><strong>TASK 3.4:</strong> Context Menu i Popovers</div>
+    <p>Kontekstowe menu (prawy klawisz) dla: projektów (Remove, Open in Finder, Open in VS Code), wątków (Rename, Duplicate, Archive, Delete), wiadomości (Copy, Delete). shadcn DropdownMenu + shadcn ContextMenu.</p>
+
+    <div class="task-item"><strong>TASK 3.5:</strong> Empty States i Loading</div>
+    <p>Spójne empty state components: "No projects yet" z CTA, "No threads" z CTA, "Select a project" (gdy brak wybranego projektu). Loading skeletons (shadcn Skeleton) dla list podczas fetchowania. Animacje przejść (Framer Motion): fade-in dla nowych elementów, slide dla paneli.</p>
+
+    <h4>Kryteria Akceptacji Sprintu 3</h4>
+    <ul>
+      <li>Dark/light theme działa i jest persistowane</li>
+      <li>Window controls wyglądają natywnie na każdej platformie</li>
+      <li>Settings UI jest funkcjonalne (theme, projects list)</li>
+      <li>Context menu działa na projektach i wątkach</li>
+      <li>Empty states i loading states są spójne</li>
+    </ul>
+
+    <!-- FAZA 2 -->
+    <h3>Faza 2: Chat AI ze Streaming</h3>
+    <p><strong>Sprint 4-5 | Tydzień 7-10 | Cel:</strong> Pełny chat z markdown, code blocks, streaming, multi-provider</p>
+
+    <div class="sprint-header">Sprint 4: Chat Backend (Rust)</div>
+    <p><em>Tydzień 7-8 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 4.1:</strong> LLM Client w Rust</div>
+    <p>Moduł <code>llm.rs</code>: struktura <code>LlmClient</code> z konfiguracją (provider, api_key, model, base_url). Funkcja <code>stream_chat(messages, config)</code> wysyła POST do API (OpenAI/Anthropic/Ollama) z <code>stream: true</code> i zwraca <code>impl Stream</code> (SSE). Użycie reqwest + eventsource-stream + futures. Parsowanie SSE: każdy event zawiera <code>choices[0].delta.content</code> (OpenAI) lub <code>delta.text</code> (Anthropic). Error handling: retry 3x, timeout 30s, graceful degradation.</p>
+
+    <div class="task-item"><strong>TASK 4.2:</strong> Tauri Command dla Chatu</div>
+    <p><code>#[tauri::command] async fn llm_chat(window: Window, payload: ChatPayload) -> Result&lt;(), String&gt;</code>:</p>
+    <ol>
+      <li>pobiera historię messages z SQLite,</li>
+      <li>buduje pełny payload (system prompt + history + user message),</li>
+      <li>liczy tokeny,</li>
+      <li>wysyła request streaming,</li>
+      <li>dla każdego tokena: <code>window.emit("llm_token", json!({"thread_id": id, "token": token}))</code>,</li>
+      <li>po zakończeniu zapisuje pełną odpowiedź do SQLite.</li>
+    </ol>
+    <p>Wsparcie dla Abort (przerwanie generowania).</p>
+
+    <div class="task-item"><strong>TASK 4.3:</strong> API Key Management</div>
+    <p>Moduł <code>crypto.rs</code>: szyfrowanie kluczy API. Szyfr AES-256-GCM z kluczem derivowanym z machine-specific secret (hardware ID). Tabela <code>api_keys</code>: provider (openai/anthropic/ollama), key_encrypted (BLOB), created_at. Commands: <code>save_api_key(provider, key)</code>, <code>get_api_key(provider)</code> (zwraca odszyfrowany), <code>delete_api_key(provider)</code>. Nigdy nie zapisuj plain-text keys!</p>
+
+    <div class="task-item"><strong>TASK 4.4:</strong> Model Config UI</div>
+    <p>Frontend: Settings &gt; AI Models — formularz do dodawania kluczy API. Pola: Provider (dropdown), API Key (password input, masked), Model (dropdown z listą), Base URL (optional, dla Ollama). Zapis przez Tauri command <code>save_api_key</code>. Lista dodanych modeli z opcją edycji/usuwania. Test connection button (ping API z kluczem).</p>
+
+    <div class="task-item"><strong>TASK 4.5:</strong> Ollama Integration</div>
+    <p>Wsparcie dla Ollama (localhost:11434): auto-discovery (sprawdza czy Ollama działa na porcie 11434), lista dostępnych modeli (<code>GET /api/tags</code>), konfiguracja bez klucza API (Ollama nie wymaga). Default dla offline mode. Fallback: gdy Ollama nie jest dostępne, pokazuje info + link do instalacji.</p>
+
+    <h4>Kryteria Akceptacji Sprintu 4</h4>
+    <ul>
+      <li>Rust command <code>llm_chat</code> streamuje odpowiedź z OpenAI API</li>
+      <li>Tokeny są emitowane jako Tauri events do frontendu</li>
+      <li>Klucze API są szyfrowane w SQLite</li>
+      <li>Ollama jest wykrywane i działa jako provider</li>
+    </ul>
+
+    <div class="sprint-header">Sprint 5: Chat UI i Markdown</div>
+    <p><em>Tydzień 9-10 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 5.1:</strong> Chat Input Component</div>
+    <p>Komponent <code>ChatInput</code>: textarea auto-resize (min 1 linia, max 10 linii), placeholder "Ask the agent to do something...". Przycisk Attach (paperclip icon) — Tauri <code>dialog.open</code> do wyboru pliku, plik jest odczytywany przez <code>fs.readTextFile</code> i dodawany jako kontekst (wyświetlany jako chip z nazwą + opcja usunięcia). Przycisk Send (arrow icon, disabled gdy pusty). Przycisk Stop (square icon, pojawia się podczas streamingu). Keyboard: Enter = send, Shift+Enter = nowa linia.</p>
+
+    <div class="task-item"><strong>TASK 5.2:</strong> Message List Component</div>
+    <p>Komponent <code>MessageList</code>: lista wiadomości z wirtualizacją (TanStack Virtual) dla wydajności przy 100+ wiadomościach. Typy wiadomości: User (prawo, primary tint), Assistant (lewo, neutral), System (center, muted italic), Tool Call (lekki, wrench icon). Auto-scroll do najnowszej wiadomości z opcją wyłączenia (przycisk pojawia się przy scroll up). Timestamp: relative ("2m ago").</p>
+
+    <div class="task-item"><strong>TASK 5.3:</strong> Markdown Rendering</div>
+    <p>Integracja react-markdown: renderowanie nagłówków, list, linków, tabele (shadcn Table), blockquotes. remark-gfm dla GitHub Flavored Markdown. Code blocks: react-syntax-highlighter (Prism.js) z theme dostosowanym do dark/light. Code block header: język (badge) + Copy button (z checkmark po skopiowaniu). Inline code: bg tint. Linki: otwierają się w przeglądarce (<code>shell.open</code>).</p>
+
+    <div class="task-item"><strong>TASK 5.4:</strong> Streaming UI</div>
+    <p>Frontend odbiera tokeny przez <code>listen("llm_token", handler)</code> i appenduje do aktualnej wiadomości assistant. Animacja: tokeny pojawiają się bez flickering (Framer Motion layout animation). Typing indicator: trzy kropki animowane gdy czekamy na pierwszy token. Stop button: wysyła abort signal (command <code>llm_abort</code>). Cursor blink na końcu streamingu. Po zakończeniu: pełna wiadomość jest zapisywana do SQLite (async).</p>
+
+    <div class="task-item"><strong>TASK 5.5:</strong> Thread Config Bar</div>
+    <p>Górna część panelu chatu — konfiguracja wątku: Model Selector (dropdown z skonfigurowanymi modelami), Mode Toggle (Chat | Plan — tab switch), Access Level (Full | Supervised — toggle), Reasoning Level (slider 1-5, tylko dla Plan mode). Wszystkie wartości zapisywane w SQLite per wątek i odtwarzane przy otwarciu.</p>
+
+    <h4>Kryteria Akceptacji Sprintu 5 (MVP v1!)</h4>
+    <ul>
+      <li>Chat UI pozwala wysłać wiadomość i dostać streaming odpowiedź</li>
+      <li>Odpowiedzi są renderowane jako markdown z code blocks</li>
+      <li>Code blocks mają syntax highlighting i copy button</li>
+      <li>Można załączyć plik jako kontekst</li>
+      <li>Stop button przerywa generowanie</li>
+      <li>Wiadomości są persistowane w SQLite (później odświeżone)</li>
+    </ul>
+    <p><strong>Milestone: MVP v1</strong> — Po tym sprincie masz działającą aplikację desktopową z chat AI, streaming, markdown i multi-provider support. To jest minimalny produkt, którym możesz się chwalić i używać na co dzień!</p>
+
+    <!-- FAZA 3 -->
+    <h3>Faza 3: Projekty i Git Integration</h3>
+    <p><strong>Sprint 6-7 | Tydzień 11-14 | Cel:</strong> Pełna integracja z Git, worktree, project management</p>
+
+    <div class="sprint-header">Sprint 6: Git Integration</div>
+    <p><em>Tydzień 11-12 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 6.1:</strong> Git Manager (Rust)</div>
+    <p>Moduł <code>git.rs</code> używający <code>git2</code>: funkcje: <code>repo_status(path)</code> zwraca branch, ahead/behind, modified/staged/untracked files; <code>get_branches(path)</code> lista branchy; <code>create_worktree(repo_path, branch_name, worktree_path)</code> tworzy nowy worktree; <code>delete_worktree(repo_path, worktree_path)</code> usuwa worktree; <code>commit(path, message, files)</code> commituje zmiany; <code>push(path, branch)</code> push do remote; <code>get_diff(path, old_tree, new_tree)</code> zwraca diff jako string. Error handling: każda funkcja zwraca <code>Result&lt;T, GitError&gt;</code>.</p>
+
+    <div class="task-item"><strong>TASK 6.2:</strong> Project Git Status</div>
+    <p>Po dodaniu projektu, aplikacja auto-detektuje repozytorium Git (sprawdza czy .git istnieje). W sidebarze przy projekcie: aktualny branch (badge), liczba zmienionych plików (badge). Tauri commands: <code>get_git_status(project_id)</code> — Rust używa git2 do pobrania statusu i zwraca JSON. Auto-refresh: co 30s + na demand (prawy klawisz "Refresh").</p>
+
+    <div class="task-item"><strong>TASK 6.3:</strong> Add Project Flow</div>
+    <p>Ulepszony flow dodawania projektu: (1) Przycisk "Add Project" otwiera Tauri <code>dialog.open</code> (folder picker), (2) Użytkownik wybiera folder, (3) Rust sprawdza czy to Git repo (git2), (4) Pobiera branch i remote URL, (5) Zapisuje do SQLite, (6) Frontend odświeża listę. Toast notification: "Project added: [nazwa]". Błąd: jeśli folder nie istnieje lub nie ma praw dostępu.</p>
+
+    <div class="task-item"><strong>TASK 6.4:</strong> File Attachment Context</div>
+    <p>Ulepszenie attach w chacie: można dołączyć plik z projektu (relative path) lub z dowolnego miejsca (absolute path). Kontekst jest budowany w Rust: <code>build_context(attached_files, project_path)</code> — czyta pliki, formatuje jako "<code>```filename\ncontent\n```</code>". Token counting: sprawdza czy kontekst + prompt nie przekracza limitu modelu. Warning jeśli za duży kontekst.</p>
+
+    <div class="task-item"><strong>TASK 6.5:</strong> Thread Mode Config</div>
+    <p>Implementacja config bar w wątku: Model selector (pobiera z SQLite listę skonfigurowanych modeli), Mode toggle (Chat/Plan) zapisany w <code>threads.mode</code>, Access Level (Full/Supervised) w <code>threads.access_level</code>, Reasoning Level slider w <code>threads.reasoning_level</code>, Worktree toggle (enabled/disabled). Wartości domyślne: Chat mode, Supervised access, Reasoning 3, Worktree enabled.</p>
+
+    <h4>Kryteria Akceptacji Sprintu 6</h4>
+    <ul>
+      <li>Rust git manager działa (status, worktree, commit, push)</li>
+      <li>Projekty pokazują branch i status Git w sidebarze</li>
+      <li>File attachment z projektu buduje kontekst dla AI</li>
+      <li>Thread config (mode, access, reasoning) jest persistowane</li>
+    </ul>
+
+    <div class="sprint-header">Sprint 7: Worktree i Auto-Actions</div>
+    <p><em>Tydzień 13-14 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 7.1:</strong> Worktree Auto-Create</div>
+    <p>Gdy użytkownik tworzy wątek w worktree mode: Rust automatycznie tworzy worktree przez <code>git2::Worktree::add()</code>. Branch name: <code>ai/[slug-tytułu-wątku]</code> (np. <code>ai/add-auth-middleware</code>). Worktree path: <code>[repo-path]/.ai-worktrees/[branch-name]</code>. Zapis <code>worktree_path</code> i <code>branch_name</code> w tabeli threads. Wątek jest powiązany z tym worktree — wszystkie operacje agenta działają w tej ścieżce.</p>
+
+    <div class="task-item"><strong>TASK 7.2:</strong> Worktree Cleanup</div>
+    <p>Auto-cleanup worktree: gdy wątek jest archiwowany/usunięty lub użytkownik klika "Discard" — Rust usuwa worktree przez <code>git2::Worktree::prune()</code> + usuwa branch. Opcja "Keep worktree" w dialogu potwierdzenia. Manual cleanup w Settings &gt; Projects: lista worktrees z opcjami usunięcia.</p>
+
+    <div class="task-item"><strong>TASK 7.3:</strong> Agent File Operations</div>
+    <p>Tauri commands dla operacji na plikach (używane przez agenta AI): <code>read_file(path)</code> czyta plik jako string, <code>write_file(path, content)</code> — zapisuje plik, <code>list_files(dir)</code> — lista plików w katalogu (tree view), <code>search_files(dir, query)</code> — szuka tekstu w plikach (grep-like). Scope: tylko wewnątrz <code>project_path</code>/<code>worktree_path</code> (security!). File watcher (notify): emituje event gdy agent zmienia plik (frontend odświeża diff).</p>
+
+    <div class="task-item"><strong>TASK 7.4:</strong> Quick Actions UI</div>
+    <p>Przycisk "Quick Actions" w toolbarze wątku: dropdown z listą akcji. Wbudowane akcje: "Run Dev Server" (<code>npm run dev</code>), "Run Tests" (<code>npm test</code>), "Run Lint" (<code>npm run lint</code>), "Run Format" (<code>npm run format</code>). Definiowanie własnych akcji: Settings &gt; Quick Actions formularz (nazwa, komenda, keybinding, auto-run). Akcje są persistowane w SQLite. Output akcji: wyświetlany w terminal panelu.</p>
+
+    <div class="task-item"><strong>TASK 7.5:</strong> Commit, Push, PR Flow</div>
+    <p>Po zakończeniu pracy agenta: panel "Review Changes" z listą zmienionych plików (z <code>git diff --stat</code>). Przyciski: "Commit" (modal z auto-generated message lub manual), "Commit &amp; Push", "Commit, Push &amp; Create PR" (otwiera przeglądarkę z pre-filled PR title i description). Tauri <code>shell.open</code> do otwarcia GitHub w przeglądarce. PR URL: <code>https://github.com/[owner]/[repo]/compare/[branch]?title=...&amp;body=...</code></p>
+
+    <h4>Kryteria Akceptacji Sprintu 7 (MVP v2!)</h4>
+    <ul>
+      <li>Worktree jest auto-tworzone dla wątków w worktree mode</li>
+      <li>Agent może czytać i pisać pliki w worktree</li>
+      <li>Quick actions działają i wykonują komendy shell</li>
+      <li>Commit + Push + Create PR flow działa</li>
+    </ul>
+
+    <!-- FAZA 4 -->
+    <h3>Faza 4: Agenci, Plan Mode i Diff Viewer</h3>
+    <p><strong>Sprint 8-10 | Tydzień 15-20 | Cel:</strong> Plan mode, diff viewer, code review, agent actions</p>
+
+    <div class="sprint-header">Sprint 8: Plan Mode i Diff Viewer</div>
+    <p><em>Tydzień 15-16 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 8.1:</strong> Plan Mode Backend</div>
+    <p>Gdy wątek jest w Plan mode, agent przed działaniem generuje plan: system prompt modyfikowany o "First, analyze the codebase and create a step-by-step plan. Do not write any code yet.". Streaming planu: każdy krok jest emitowany jako osobny event. Format planu: JSON array kroków (title, description, files_involved). Zapis planu w <code>threads.plan</code> (JSON). Frontend wyświetla plan jako checklistę.</p>
+
+    <div class="task-item"><strong>TASK 8.2:</strong> Plan UI</div>
+    <p>Komponent <code>PlanView</code>: lista kroków z checkboxami (pending/in_progress/completed). Każdy krok: tytuł (bold), opis (zwijany), lista plików (badges). Przyciski: "Edit Plan" (edytowalny JSON), "Approve &amp; Execute" (agent zaczyna wykonywać kroki), "Regenerate" (generuje plan od nowa). Progress bar: X of Y steps completed. Podczas wykonywania: aktywny krok ma spinner, zakończone mają checkmark.</p>
+
+    <div class="task-item"><strong>TASK 8.3:</strong> Diff Viewer Component</div>
+    <p>Komponent <code>DiffViewer</code> oparty na react-diff-viewer-continued (lub Monaco diff editor). Tryby: Split (side-by-side) | Unified (jedna kolumna). Lista plików po lewej z liczbą + i - linii. Code highlighting: dodane linie (green bg), usunięte (red bg), kontekst (normal). Header: nazwa pliku, liczba zmian. Navigation: prev/next file, prev/next hunk.</p>
+
+    <div class="task-item"><strong>TASK 8.4:</strong> Agent Actions (Tool Calls)</div>
+    <p>System tool calls: agent może wywoływać funkcje (przez function calling w API): <code>read_file</code>, <code>write_file</code>, <code>run_command</code>, <code>search_code</code>. Każdy tool call jest wyświetlany w chacie jako specjalna wiadomość (tool call card): nazwa toolu, parametry (JSON), status (running/completed/error), wynik (zwijany). Timeout: 30s per tool call. Error handling: retry lub przerwanie.</p>
+
+    <div class="task-item"><strong>TASK 8.5:</strong> Human-in-the-Loop (Supervised Mode)</div>
+    <p>Gdy wątek jest w Supervised mode: przed każdą operacją piszącą (write_file, run_command destrukcyjne) agent zatrzymuje się i czeka na akceptację. Modal "Action Required": opis akcji, podgląd zmian (diff), przyciski "Approve" (kontynuuj), "Reject" (pomiń), "Edit" (zmień i approve). Timeout: 10 minut (po czym anuluje). Wszystkie oczekujące akcje są persistowane (można zamknąć i wrócić do aplikacji).</p>
+
+    <h4>Kryteria Akceptacji Sprintu 8</h4>
+    <ul>
+      <li>Plan mode generuje i wyświetla plan krok-po-kroku</li>
+      <li>Diff viewer pokazuje zmiany w split i unified mode</li>
+      <li>Tool calls są wyświetlane w chacie ze statusem</li>
+      <li>Supervised mode blokuje akcje i czeka na approval</li>
+    </ul>
+
+
+    <div class="sprint-header">Sprint 9: Code Review i Inline Edit</div>
+    <p><em>Tydzień 17-18 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 9.1:</strong> Inline Comments w Diff</div>
+    <p>Możliwość dodawania komentarzy do konkretnych linii w diff viewer (jak GitHub PR review). Kliknięcie na numer linii otwiera textarea. Komentarze są powiązane z linią i plikiem. Komentarze mogą być wysłane do AI jako kontekst ("fix this line"). Wyświetlanie komentarzy jako badge/bubble przy linii.</p>
+
+    <div class="task-item"><strong>TASK 9.2:</strong> Inline Edit w Diff</div>
+    <p>Edycja kodu bezpośrednio w diff viewer (przed approval). Podwójne kliknięcie na linie (lub przycisk "Edit") otwiera Monaco editor inline. Można zmienić kod i zapisać — zmiana jest uwzględniona w finalnym diff. Przydatne gdy agent prawie dobrze napisał, ale trzeba coś poprawić.</p>
+
+    <div class="task-item"><strong>TASK 9.3:</strong> Review Changes Panel</div>
+    <p>Panel review po zakończeniu pracy agenta: podsumowanie (N plików, +X/-Y linii), lista zmian (każdy plik z mini-diff), auto-generated commit message (editable), auto-generated PR description. Przyciski: "Stage All", "Unstage All", "Stage Selected", "Commit", "Commit &amp; Push", "Create PR", "Discard All". Status: open/merged/closed indicator.</p>
+
+    <div class="task-item"><strong>TASK 9.4:</strong> Git Diff per Turn</div>
+    <p>Diff viewer pokazuje zmiany per "turn" (krok agenta) — można zobaczyć co agent zmienił w każdym kroku osobno. Timeline: lista kroków z mini-diff stat. Kliknięcie kroku pokazuje diff dla tego konkretnego kroku. Pomaga zrozumieć jak agent doszedł do finalnego rozwiązania.</p>
+
+    <div class="task-item"><strong>TASK 9.5:</strong> File Watcher i Auto-Refresh</div>
+    <p>File watcher (notify crate) monitoruje project path. Gdy agent zmienia plik: (1) emit Tauri event <code>file_changed</code>, (2) frontend odświeża diff, (3) status bar pokazuje "X files changed". Debounced (500ms) dla batch changes. Można wyłączyć w settings.</p>
+
+    <h4>Kryteria Akceptacji Sprintu 9</h4>
+    <ul>
+      <li>Inline comments i edit w diff viewer działają</li>
+      <li>Review changes panel pokazuje podsumowanie i akcje</li>
+      <li>Diff per turn pokazuje zmiany per krok agenta</li>
+      <li>File watcher auto-odświeża diff</li>
+    </ul>
+
+    <div class="sprint-header">Sprint 10: Multi-Window i Polish</div>
+    <p><em>Tydzień 19-20 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 10.1:</strong> Multi-Window Support</div>
+    <p>Tauri multi-window: można otworzyć diff w osobnym oknie ("Open in New Window" w kontekstowym menu). Nowe okno: tytuł "Diff: [filename]", zawiera tylko diff viewer (bez sidebarów). Komunikacja między oknami przez Tauri events. Zamknięcie okna nie zamyka głównej aplikacji. Window state (pozycja, rozmiar) persistowane.</p>
+
+    <div class="task-item"><strong>TASK 10.2:</strong> Global Shortcut Enhancements</div>
+    <p><code>Cmd/Ctrl + Shift + C</code>: pokazuje/chowa okno (toggle). <code>Cmd/Ctrl + Shift + N</code>: szybkie tworzenie nowego wątku (nawet gdy app jest schowana). Global shortcut konfigurowalny w Settings. Tray click: toggle window. Tray menu: Recent Projects, New Thread, Settings, Quit.</p>
+
+    <div class="task-item"><strong>TASK 10.3:</strong> Notifications</div>
+    <p>Natywne powiadomienia OS (tauri-plugin-notification): gdy agent zakończy pracę ("Task completed: [tytuł]"), gdy oczekuje na approval ("Action required"), gdy wystąpi błąd. Powiadomienia klikalne (otwierają odpowiedni wątek). Można wyłączyć w settings per typ.</p>
+
+    <div class="task-item"><strong>TASK 10.4:</strong> Performance Optimization</div>
+    <p>Wirtualizacja list: TanStack Virtual dla wątków (100+ wątków) i wiadomości (1000+ wiadomości). Lazy loading: diff viewer ładuje tylko widoczne pliki. Code splitting: Monaco editor ładowany on-demand (dynamic import). Debounced resize handler dla resizable panels. SQLite queries z indeksami (<code>threads.project_id</code>, <code>messages.thread_id</code>).</p>
+
+    <div class="task-item"><strong>TASK 10.5:</strong> Beta Testing</div>
+    <p>Przygotowanie builda beta: <code>cargo tauri build</code> dla wszystkich platform. GitHub Release z opisem i changelog. Zebranie feedbacku (wewnętrzne testowanie). Lista znanych bugów i ograniczeń. Zbieranie metryk: crash reports, performance data.</p>
+
+    <h4>Kryteria Akceptacji Sprintu 10 (BETA!)</h4>
+    <ul>
+      <li>Multi-window działa (diff w osobnym oknie)</li>
+      <li>Powiadomienia działają (agent completed, action required)</li>
+      <li>Aplikacja jest płynna przy dużej liczbie wątków/wiadomości</li>
+      <li>Beta build gotowy do testowania</li>
+    </ul>
+
+    <!-- FAZA 5 -->
+    <h3>Faza 5: Terminal, Skille i Quick Actions</h3>
+    <p><strong>Sprint 11-13 | Tydzień 21-26 | Cel:</strong> Zintegrowany terminal, system skilli, quick actions</p>
+
+    <div class="sprint-header">Sprint 11: Integrated Terminal</div>
+    <p><em>Tydzień 21-22 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 11.1:</strong> Pty Backend (Rust)</div>
+    <p>Moduł <code>pty.rs</code> używający <code>portable-pty</code>: <code>create_pty(shell, cwd, cols, rows)</code> tworzy pseudo-terminal. <code>write(input)</code> wysyła input do pty. <code>read_stream()</code> zwraca stream outputu (async). <code>resize(cols, rows)</code> zmienia rozmiar. Kill: zabija proces. Tauri commands: <code>pty_create</code>, <code>pty_write</code>, <code>pty_resize</code>, <code>pty_kill</code>. Events: <code>pty_output</code> (data z pty do frontendu), <code>pty_exit</code> (proces się zakończył).</p>
+
+    <div class="task-item"><strong>TASK 11.2:</strong> Terminal Frontend</div>
+    <p>Komponent <code>TerminalPanel</code> oparty na xterm.js: xterm + WebGL addon (wydajny renderer) + Fit addon (auto-resize) + WebLinks addon (klikalne linki). Połączenie z backendem: WebSocket-like przez Tauri events (zamiast prawdziwego WS — używamy Tauri IPC z streaming). Input z xterm.js wysyłany przez <code>invoke("pty_write")</code>. Output z <code>listen("pty_output")</code> renderowany w xterm. Tabs: można mieć wiele terminali (plus icon w headerze), każdy z osobnym pty.</p>
+
+    <div class="task-item"><strong>TASK 11.3:</strong> Terminal Integration</div>
+    <p>Working directory: auto-ustawiane na root projektu (lub worktree). Shell: auto-detekcja domyślnego shella (<code>SHELL</code> env var, lub fallback: bash/zsh/powershell). Quick commands: przyciski w toolbarze terminala do częstych komend ("npm test", "npm run build", "git status"). AI integration: zaznaczenie tekstu w terminalu + opcja "Explain" / "Fix" wysyła do AI.</p>
+
+    <div class="task-item"><strong>TASK 11.4:</strong> Terminal UI</div>
+    <p>Panel terminala: tabs na górze (przełączanie między terminalami), plus icon (nowy terminal), close icon (zamyka). Przycisk "Clear" (czyści ekran), "Kill" (zabija proces). Terminal zajmuje dolną część main panelu (jak VS Code) — można go pokazać/ukryć przyciskiem lub skrótem <code>Ctrl/Cmd + `</code>. Resizable height (drag).</p>
+
+    <h4>Kryteria Akceptacji Sprintu 11</h4>
+    <ul>
+      <li>Terminal działa (shell, komendy, output)</li>
+      <li>Wiele terminali w tabs</li>
+      <li>Working directory auto-ustawiane na projekt</li>
+      <li>Quick commands działają</li>
+    </ul>
+
+    <div class="sprint-header">Sprint 12: Skills System</div>
+    <p><em>Tydzień 23-24 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 12.1:</strong> Skills Data Model</div>
+    <p>Tabela <code>skills</code>: id, name, description, system_prompt (text), tools (JSON array), model (string), is_builtin (boolean), created_at. Built-in skills (seed): @react-component, @api-endpoint, @test-writer, @refactor, @docs, @security, @optimize. Custom skills: tworzone przez użytkownika.</p>
+
+    <div class="task-item"><strong>TASK 12.2:</strong> Skill Manager UI</div>
+    <p>Strona Settings &gt; Skills: lista skilli (karty z nazwą, opisem, tag built-in/custom). Edytor: formularz (nazwa, opis, system prompt textarea, tools multi-select, model select). Test playground: textarea do wpisania promptu testowego, przycisk "Run", wynik w panelu chat. Import/export: JSON format.</p>
+
+    <div class="task-item"><strong>TASK 12.3:</strong> @ Mention w Chat</div>
+    <p>W inpucie chatu: wpisanie "@" otwiera autocomplete popup z listą skilli (fuzzy search). Wybor skilla dodaje go do kontekstu (chip z nazwą). Skill modyfikuje system prompt dla tego zapytania. Można użyć wielu skilli naraz. Usunięcie chipu = usunięcie skilla z kontekstu.</p>
+
+    <div class="task-item"><strong>TASK 12.4:</strong> Skill Execution</div>
+    <p>Rust: gdy wiadomość zawiera skill, <code>build_context</code> dodaje system prompt skilla do payloadu LLM. Format: "You are an expert [skill description]. [system_prompt]. The user request: [user message]". Priority: jeśli wiele skilli, skille są scalane (concatenated system prompts).</p>
+
+    <div class="task-item"><strong>TASK 12.5:</strong> Skills Polish</div>
+    <p>7 wbudowanych skilli z dobrze napisanymi promptami. Testy każdego skilla w playground. Dokumentacja skilli w UI (opis, przykłady użycia). Presets: przyciski szybkiego użycia skilli nad inputem (jak emoji reactions, ale skille).</p>
+
+    <h4>Kryteria Akceptacji Sprintu 12</h4>
+    <ul>
+      <li>7 wbudowanych skilli działa</li>
+      <li>Można tworzyć custom skille</li>
+      <li>@ mention autocomplete w chacie</li>
+      <li>Skille modyfikują zachowanie AI</li>
+    </ul>
+
+    <div class="sprint-header">Sprint 13: Quick Actions i File Explorer</div>
+    <p><em>Tydzień 25-26 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 13.1:</strong> Quick Actions Backend</div>
+    <p>Tabela <code>quick_actions</code>: id, project_id, name, command, keybinding, auto_run, created_at. Commands: <code>create_quick_action</code>, <code>list_quick_actions(project_id)</code>, <code>run_quick_action(id)</code> (spawna komendę shell w terminalu), <code>delete_quick_action(id)</code>. Auto-run: po utworzeniu worktree, akcje z auto_run=true są automatycznie wykonywane (np. <code>npm install</code>).</p>
+
+    <div class="task-item"><strong>TASK 13.2:</strong> Quick Actions UI</div>
+    <p>Toolbar w headerze wątku: lista quick actions jako przyciski (ikona + nazwa) + dropdown "More". Przycisk "Add Action" otwiera formularz (nazwa, komenda, keybinding checkbox, auto-run checkbox). Keybinding: jeśli ustawione, działa globalnie w kontekście projektu. Output komendy: wyświetlany w terminal panelu.</p>
+
+    <div class="task-item"><strong>TASK 13.3:</strong> File Explorer</div>
+    <p>Komponent <code>FileExplorer</code> w sidebarze (opcjonalny panel): tree view plików projektu (jak VS Code explorer). Tauri <code>fs.readDir</code> rekurencyjnie buduje drzewo. Ikony per typ pliku. Kliknięcie: otwiera plik w code viewer (Monaco). Context menu: Copy path, Open in VS Code. Auto-refresh: file watcher odświeża drzewo przy zmianach. Collapse/expand all.</p>
+
+    <div class="task-item"><strong>TASK 13.4:</strong> Code Viewer</div>
+    <p>Komponent <code>CodeViewer</code>: Monaco Editor w read-only mode do przeglądania plików. Otwiera się po kliknięciu pliku w explorer lub w chacie ("show file"). Syntax highlighting dla wielu języków. Go to line (Ctrl+G). Breadcrumbs: ścieżka pliku. Split view: można otworzyć wiele plików w tabs (jak VS Code).</p>
+
+    <div class="task-item"><strong>TASK 13.5:</strong> Usage Stats</div>
+    <p>Tabela <code>usage_stats</code>: data, provider, model, tokens_input, tokens_output, cost_usd. Dashboard w Settings: wykres użycia tokenów w czasie, koszty per model, total cost. Lokalne liczenie (nie wysyła danych nigdzie). Export do CSV.</p>
+
+    <h4>Kryteria Akceptacji Sprintu 13</h4>
+    <ul>
+      <li>Quick actions są wykonywane w terminalu</li>
+      <li>File explorer pokazuje tree view projektu</li>
+      <li>Code viewer (Monaco) otwiera pliki do przeglądania</li>
+      <li>Usage stats są zbierane i wyświetlane</li>
+    </ul>
+
+    <!-- FAZA 6 -->
+    <h3>Faza 6: Hardening i Release</h3>
+    <p><strong>Sprint 14-16 | Tydzień 27-32 | Cel:</strong> Auto-updater, CI/CD, signing, produkcyjny release</p>
+
+    <div class="sprint-header">Sprint 14: Auto-Updater i CI/CD</div>
+    <p><em>Tydzień 27-28 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 14.1:</strong> Auto-Updater</div>
+    <p>Konfiguracja <code>tauri-plugin-updater</code> w <code>tauri.conf.json</code>: update server URL (GitHub Releases JSON manifest). Format manifestu: <code>{"version": "1.0.1", "notes": "Changelog...", "pub_date": "2026-05-01", "platforms": {"darwin-aarch64": {"signature": "...", "url": "https://..."}, ...}}</code>. Signing: klucz prywatny (ed25519) do podpisywania update'ów. Check: przy starcie app sprawdza czy jest nowsza wersja, pokazuje dialog z changelog + "Update Now" / "Later". Background download i install.</p>
+
+    <div class="task-item"><strong>TASK 14.2:</strong> GitHub Actions CI/CD</div>
+    <p>Workflow <code>release.yml</code>: trigger na push tagu <code>v*</code>. Jobs: (1) build-macos — buduje universal binary (arm64 + x86_64), .dmg, (2) build-windows — buduje .msi + .exe, (3) build-linux — buduje .AppImage + .deb. Każdy job: checkout, setup Rust + Node, <code>cargo tauri build</code>, upload artifact, tworzy GitHub Release z assetami. Code signing: macOS (Developer ID certificate), Windows (signtool z certyfikatem).</p>
+
+    <div class="task-item"><strong>TASK 14.3:</strong> Error Reporting</div>
+    <p>Integracja z Sentry dla desktop (voluntary opt-in): <code>@sentry/electron</code> (lub <code>@sentry/browser</code> dla Tauri). Crash reporting: uncaught exceptions w Rust i JS. Error boundaries w React. Logi: tracing w Rust zapisuje do <code>app_logsDir/app.log</code> (rotacja: 5 plików po 10MB). Możliwość eksportu logów (Settings &gt; Advanced &gt; Export Logs).</p>
+
+    <div class="task-item"><strong>TASK 14.4:</strong> Data Backup</div>
+    <p>Export danych: Settings &gt; Advanced &gt; Export Data — generuje ZIP z: SQLite database, settings.json, api_keys (zaszyfrowane). Import danych: przy pierwszym uruchomieniu na nowej maszynie — można zaimportować ZIP. Auto-backup: co tydzień, snapshot DB do <code>app_dataDir/backups/</code> (max 10 snapshots, FIFO).</p>
+
+    <div class="task-item"><strong>TASK 14.5:</strong> Documentation</div>
+    <p>README.md: opis, screenshoty, instalacja, stack, contributing. CHANGELOG.md: format Keep a Changelog. User Guide: <code>docs/usage.md</code> (getting started, features, tips). Architecture: <code>docs/architecture.md</code> (opis modułów, flow danych). License: MIT (open source).</p>
+
+    <h4>Kryteria Akceptacji Sprintu 14</h4>
+    <ul>
+      <li>Auto-updater sprawdza i instaluje update'y</li>
+      <li>CI/CD buduje dla wszystkich 3 platform</li>
+      <li>Error reporting działa (voluntary)</li>
+      <li>Export/import danych działa</li>
+    </ul>
+
+    <div class="sprint-header">Sprint 15: Polish i Bug Fixes</div>
+    <p><em>Tydzień 29-30 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 15.1:</strong> Cross-Platform Testing</div>
+    <p>Testowanie na wszystkich platformach: macOS (Intel + Apple Silicon), Windows 10/11, Linux (Ubuntu 22.04). Sprawdzenie: native window controls, system tray, global shortcuts, file picker, shell commands, fonts rendering, dark/light theme. Znalezione bugi: lista + fixy.</p>
+
+    <div class="task-item"><strong>TASK 15.2:</strong> Performance Audit</div>
+    <p>Startup time: target &lt; 2s od kliknięcia do interaktywnego UI. Memory usage: target &lt; 200MB RAM (vs 500MB+ Electron). Bundle size: target &lt; 15MB. SQLite queries: EXPLAIN dla wolnych zapytań, dodanie indeksów. Frontend: Lighthouse audit, eliminacja re-renderów (React DevTools Profiler).</p>
+
+    <div class="task-item"><strong>TASK 15.3:</strong> Edge Cases</div>
+    <p>Handling edge cases: brak internetu (offline mode z Ollama), pusty projekt (brak plików), bardzo duży projekt (10000+ plików — lazy loading), bardzo długa konwersacja (1000+ wiadomości — wirtualizacja), nieprawidłowy klucz API (graceful error), Ollama nie zainstalowane (link do instrukcji), brak Git w projekcie (info + CTA).</p>
+
+    <div class="task-item"><strong>TASK 15.4:</strong> Accessibility</div>
+    <p>A11y: keyboard navigation (Tab, Enter, Escape, Arrow keys), ARIA labels dla screen readerów, kontrast kolorów (WCAG AA), focus indicators, skróty klawiszowe dokumentowane. Test z VoiceOver (macOS) i NVDA (Windows).</p>
+
+    <div class="task-item"><strong>TASK 15.5:</strong> Final Polish</div>
+    <p>Mikro-interakcje: Framer Motion dla wszystkich animacji (paneli, modalów, list). Loading states: skeleton screens, spinnery. Error states: friendly error messages z sugestiami fixów. Empty states: spójne i pomocne. Onboarding: pierwsze uruchomienie — wizard (witaj, dodaj projekt, skonfiguruj model).</p>
+
+    <h4>Kryteria Akceptacji Sprintu 15</h4>
+    <ul>
+      <li>Aplikacja działa na macOS, Windows i Linux</li>
+      <li>Startup &lt; 2s, RAM &lt; 200MB</li>
+      <li>Edge cases są obsługiwane</li>
+      <li>Onboarding działa dla nowych użytkowników</li>
+    </ul>
+
+    <div class="sprint-header">Sprint 16: v1.0 Release!</div>
+    <p><em>Tydzień 31-32 | Solo dev</em></p>
+
+    <div class="task-item"><strong>TASK 16.1:</strong> Release v1.0.0</div>
+    <p>Git tag <code>v1.0.0</code>. GitHub Release z: binarkami dla wszystkich platform, changelog, install instructions, screenshoty, feature list. Website/landing: prosta strona GitHub Pages z opisem aplikacji, download links, dokumentacja. Social: post na Twitter/X, Hacker News, Reddit r/webdev i r/rust. Show HN: "I built a free, open-source desktop AI code assistant".</p>
+
+    <div class="task-item"><strong>TASK 16.2:</strong> Post-Release Monitoring</div>
+    <p>GitHub Issues: szablon dla bug reports i feature requests. Labels: bug, enhancement, question, good first issue. Milestones: v1.1, v1.2. Feedback collection: GitHub Discussions, ankieta (Google Forms). Metryki: liczba downloadów, gwiazdek, issue'ów.</p>
+
+    <div class="task-item"><strong>TASK 16.3:</strong> v1.1 Planning</div>
+    <p>Backlog dla v1.1: więcej modeli (Gemini, local via LM Studio), MCP (Model Context Protocol) integration, plugin system, team/organization features, cloud sync (opcjonalny). Priorytetyzacja na podstawie feedbacku użytkowników.</p>
+
+    <h4>Kryteria Akceptacji Sprintu 16 (v1.0!)</h4>
+    <ul>
+      <li>v1.0.0 jest wydane na GitHub z binarkami</li>
+      <li>Strona landingowa działa</li>
+      <li>Feedback channel jest gotowy</li>
+      <li>Backlog v1.1 jest zaplanowany</li>
+    </ul>
+
+    <p style="margin-top:2rem; padding:1.5rem; background:var(--bg-secondary); border-radius:var(--radius); border-left:4px solid var(--success); font-size:1.1rem;">
+      <strong>RELEASE v1.0!</strong> Gratulacje! Twoja aplikacja desktopowa AI Code Assistant jest gotowa! 8 miesięcy pracy, 16 sprintów, i masz w pełni funkcjonalne narzędzie do pracy z AI kodującym — takie jak T3 Code czy Codex App, ale w 100% Twoje, open-source, i działające lokalnie na Twojej maszynie.
+    </p>
+  </section>
+
+  <!-- ========== SECTION 7 ========== -->
+  <section id="sec7">
+    <h2>7. Wymagania Systemowe</h2>
+
+    <h3>7.1. Dla Developmentu</h3>
+    <table>
+      <thead>
+        <tr><th>Komponent</th><th>Minimalne</th><th>Zalecane</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>OS</td><td>macOS 12+ / Windows 10+ / Linux Ubuntu 20.04+</td><td>macOS 14+ / Windows 11 / Ubuntu 22.04+</td></tr>
+        <tr><td>Procesor</td><td>4 rdzenie (Intel i5 / Apple M1)</td><td>8 rdzeni (Apple M3 / Intel i7 / AMD Ryzen 7)</td></tr>
+        <tr><td>RAM</td><td>8 GB</td><td>16 GB (32 GB dla Ollama 70B)</td></tr>
+        <tr><td>Dysk</td><td>10 GB SSD</td><td>50 GB SSD (NVMe)</td></tr>
+        <tr><td>Node.js</td><td>18.x</td><td>20.x LTS</td></tr>
+        <tr><td>Rust</td><td>1.75+</td><td>1.80+ (latest stable)</td></tr>
+        <tr><td>Git</td><td>2.30+</td><td>2.40+</td></tr>
+      </tbody>
+    </table>
+
+    <h3>7.2. Dla Użytkownika (Runtime)</h3>
+    <table>
+      <thead>
+        <tr><th>Komponent</th><th>Minimalne</th><th>Zalecane</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>OS</td><td>macOS 11+ / Windows 10+ / Ubuntu 20.04+</td><td>macOS 14+ / Windows 11 / Ubuntu 22.04+</td></tr>
+        <tr><td>Procesor</td><td>2 rdzenie</td><td>4+ rdzeni</td></tr>
+        <tr><td>RAM</td><td>4 GB</td><td>8 GB (16 GB dla lokalnych LLM)</td></tr>
+        <tr><td>Dysk</td><td>50 MB (app)</td><td>500 MB (app + dane)</td></tr>
+        <tr><td>Internet</td><td>Wymagany dla cloud API</td><td>Wymagany dla cloud / lokalny dla Ollama</td></tr>
+      </tbody>
+    </table>
+
+    <h3>7.3. Szacowane Koszty (dla Ciebie jako Solo Deva)</h3>
+    <table>
+      <thead>
+        <tr><th>Komponent</th><th>Koszt</th><th>Uwagi</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Apple Developer ID</td><td>$99/rok</td><td>Tylko jeśli chcesz signing na macOS</td></tr>
+        <tr><td>Windows EV Certificate</td><td>$200-400/rok</td><td>Opcjonalne (bez tego Windows Defender może ostrzegać)</td></tr>
+        <tr><td>LLM API (OpenAI)</td><td>$5-20/mies.</td><td>Zależnie od użycia (BYOK — płacisz tylko za to co użyjesz)</td></tr>
+        <tr><td>LLM API (Anthropic)</td><td>$5-20/mies.</td><td>Opcjonalnie</td></tr>
+        <tr><td>Ollama (Local LLM)</td><td>$0</td><td>Darmowe! Wymaga GPU dla większych modeli</td></tr>
+        <tr><td>GitHub (hosting)</td><td>$0</td><td>Public repo = free</td></tr>
+        <tr><td>Domain (opcjonalnie)</td><td>$10-15/rok</td><td>Jeśli chcesz stronę landingową</td></tr>
+        <tr><td><strong>RAZEM (min)</strong></td><td><strong>$0</strong></td><td>Ollama + public repo = całkowicie za darmo</td></tr>
+        <tr><td><strong>RAZEM (z API)</strong></td><td><strong>$10-40/mies.</strong></td><td>Z cloud API + macOS signing</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Podsumowanie — Dlaczego Tauri v2?</h3>
+    <div class="card">
+      <ul>
+        <li><strong>Bundle:</strong> 10-15 MB (vs 150MB+ Electron)</li>
+        <li><strong>RAM:</strong> ~50-100 MB (vs 200-500MB Electron)</li>
+        <li><strong>Startup:</strong> &lt;1s</li>
+        <li><strong>Native OS webview</strong> (nie bundluje Chromium)</li>
+        <li><strong>Rust backend</strong> (bezpieczeństwo, wydajność)</li>
+        <li><strong>Cross-platform</strong> (macOS/Windows/Linux z jednego kodu)</li>
+        <li><strong>Open source i free</strong></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>AI Code Assistant Desktop App — Blueprint v2.0 | 16.05.2026</p>
+    <p>Stack: Tauri v2 + React 19 + Rust + SQLite | Form factor: Desktop (macOS / Windows / Linux)</p>
+    <p style="margin-top:0.5rem; color:var(--text-muted);">"Twoje AI, twoje klucze, twój kod, twoja maszyna."</p>
+  </footer>
+
+</main>
+
+</body>
+</html>
