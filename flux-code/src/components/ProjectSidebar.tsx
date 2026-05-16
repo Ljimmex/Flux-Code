@@ -22,6 +22,7 @@ interface Props {
   loadThreads: (projectId: number) => Promise<void>;
   loadProjects: () => Promise<void>;
   onOpenSearch: () => void;
+  onOpenSettings: () => void;
 }
 
 interface ProjectMenuPos {
@@ -106,6 +107,7 @@ export default function ProjectSidebar({
   loadThreads,
   loadProjects,
   onOpenSearch,
+  onOpenSettings,
 }: Props) {
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<number>>(new Set());
   const [expandedThreadLists, setExpandedThreadLists] = useState<Set<number>>(new Set());
@@ -585,7 +587,7 @@ export default function ProjectSidebar({
       </div>
 
       <div className="sidebar-nav">
-        <button className="nav-item">
+        <button className="nav-item" onClick={onOpenSettings}>
           <Settings size={14} />
           <span>Settings</span>
         </button>

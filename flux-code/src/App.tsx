@@ -4,6 +4,7 @@ import ProjectSidebar from './components/ProjectSidebar';
 import MainPanel from './components/MainPanel';
 import TopBar from './components/TopBar';
 import SearchModal from './components/SearchModal';
+import SettingsModal, { initTheme } from './components/SettingsModal';
 import './styles/global.css';
 
 export interface Project {
@@ -37,6 +38,8 @@ export default function App() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
 
   const loadProjects = useCallback(async () => {
     const list = await window.electronAPI.db.getProjects();
@@ -52,6 +55,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    initTheme();
     loadProjects();
   }, [loadProjects]);
 
@@ -82,7 +86,7 @@ export default function App() {
     await loadProjects();
   };
 
-  const handleAddThread = async (projectId: number, title: string, mode: string = 'chat') => {
+  const handleAddThread = useCallback(async (projectId: number, title: string, mode: string = 'chat') => {
     const thread = await window.electronAPI.db.addThread(projectId, title, mode);
     if (thread) {
       await loadThreads(projectId);
@@ -90,16 +94,51 @@ export default function App() {
       const project = projects.find(p => p.id === projectId);
       if (project) setActiveProject(project);
     }
-  };
+  }, [loadThreads, projects]);
 
   const getProjectThreads = (projectId: number) => {
     return threads.filter(t => t.project_id === projectId);
   };
 
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCtrl = e.ctrlKey || e.metaKey;
+
+      // Toggle sidebar: Ctrl/Cmd + B
+      if (isCtrl && e.key === 'b' && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        setSidebarVisible(prev => !prev);
+      }
+
+      // Open settings: Ctrl/Cmd + ,
+      if (isCtrl && e.key === ',' && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        setSettingsOpen(prev => !prev);
+      }
+
+      // New thread: Ctrl/Cmd + N
+      if (isCtrl && e.key === 'n' && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        if (activeProject) {
+          handleAddThread(activeProject.id, 'New Thread', 'chat');
+        }
+      }
+
+      // New project: Ctrl/Cmd + Shift + N
+      if (isCtrl && e.key === 'N' && e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        handleAddProject();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeProject, handleAddThread]);
+
   return (
     <div className="app-container">
       <ResizablePanels
-        sidebarVisible={true}
+        sidebarVisible={sidebarVisible}
         sidebar={
           <ProjectSidebar
             projects={projects}
@@ -115,6 +154,7 @@ export default function App() {
             loadThreads={loadThreads}
             loadProjects={loadProjects}
             onOpenSearch={() => setSearchOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         }
         main={
@@ -145,6 +185,12 @@ export default function App() {
           onClose={() => setSearchOpen(false)}
         />
       )}
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        projects={projects}
+        onRemoveProject={handleRemoveProject}
+      />
     </div>
   );
 }
