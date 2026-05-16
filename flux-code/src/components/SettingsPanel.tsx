@@ -170,6 +170,8 @@ function ArchiveSection({
   onDeleteThread: (id: number) => void;
 }) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; threadId: number } | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -179,6 +181,28 @@ function ArchiveSection({
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
   }, []);
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelectedIds(new Set(archivedThreads.map(t => t.id)));
+  const deselectAll = () => setSelectedIds(new Set());
+
+  const handleBulkUnarchive = () => {
+    selectedIds.forEach(id => onUnarchiveThread(id));
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDelete = () => {
+    selectedIds.forEach(id => onDeleteThread(id));
+    setSelectedIds(new Set());
+  };
 
   // Group archived threads by project
   const grouped = new Map<number, Thread[]>();
@@ -192,8 +216,39 @@ function ArchiveSection({
     return <p className="settings-placeholder">No archived threads yet.</p>;
   }
 
+  const hasSelection = selectedIds.size > 0;
+
   return (
     <div className="archive-section">
+      {/* Toolbar */}
+      <div className="archive-toolbar">
+        {selectMode && hasSelection ? (
+          <div className="archive-bulk-actions">
+            <span className="archive-selection-count">{selectedIds.size} selected</span>
+            <div className="archive-bulk-btns">
+              <button className="archive-bulk-btn" onClick={handleBulkUnarchive}>
+                <Archive size={14} />
+                <span>Unarchive</span>
+              </button>
+              <button className="archive-bulk-btn danger" onClick={handleBulkDelete}>
+                <Trash2 size={14} />
+                <span>Delete</span>
+              </button>
+              <button className="archive-bulk-btn secondary" onClick={deselectAll}>
+                <span>Deselect</span>
+              </button>
+            </div>
+          </div>
+        ) : selectMode ? (
+          <div className="archive-select-bar">
+            <button className="archive-select-btn" onClick={selectAll}>Select all</button>
+            <button className="archive-select-btn secondary" onClick={() => { setSelectMode(false); deselectAll(); }}>Cancel</button>
+          </div>
+        ) : (
+          <button className="archive-select-btn" onClick={() => setSelectMode(true)}>Select</button>
+        )}
+      </div>
+
       {Array.from(grouped.entries()).map(([projectId, threads]) => {
         const project = projects.find(p => p.id === projectId);
         const projectName = project?.name ?? 'Unknown Project';
@@ -201,30 +256,41 @@ function ArchiveSection({
           <div key={projectId} className="archive-group">
             <div className="archive-group-title">{projectName}</div>
             <div className="archive-list">
-              {threads.map(thread => (
-                <div
-                  key={thread.id}
-                  className="archive-card"
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setContextMenu({ x: e.clientX, y: e.clientY, threadId: thread.id });
-                  }}
-                >
-                  <div className="archive-card-info">
-                    <span className="archive-card-title">{thread.title}</span>
-                    <span className="archive-card-meta">
-                      Archived {timeAgo(thread.updated_at)} · Created {timeAgo(thread.created_at)}
-                    </span>
-                  </div>
-                  <button
-                    className="archive-card-btn"
-                    onClick={() => onUnarchiveThread(thread.id)}
+              {threads.map(thread => {
+                const isSelected = selectedIds.has(thread.id);
+                return (
+                  <div
+                    key={thread.id}
+                    className={`archive-card ${isSelected ? 'selected' : ''} ${selectMode ? 'selectable' : ''}`}
+                    onClick={() => selectMode && toggleSelect(thread.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu({ x: e.clientX, y: e.clientY, threadId: thread.id });
+                    }}
                   >
-                    <Archive size={14} />
-                    <span>Unarchive</span>
-                  </button>
-                </div>
-              ))}
+                    {selectMode && (
+                      <div className="archive-checkbox">
+                        <div className={`archive-check ${isSelected ? 'checked' : ''}`} />
+                      </div>
+                    )}
+                    <div className="archive-card-info">
+                      <span className="archive-card-title">{thread.title}</span>
+                      <span className="archive-card-meta">
+                        Archived {timeAgo(thread.updated_at)} · Created {timeAgo(thread.created_at)}
+                      </span>
+                    </div>
+                    {!selectMode && (
+                      <button
+                        className="archive-card-btn"
+                        onClick={(e) => { e.stopPropagation(); onUnarchiveThread(thread.id); }}
+                      >
+                        <Archive size={14} />
+                        <span>Unarchive</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         );

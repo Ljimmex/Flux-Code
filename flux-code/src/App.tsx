@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import ResizablePanels from './components/ResizablePanels';
 import ProjectSidebar from './components/ProjectSidebar';
 import MainPanel from './components/MainPanel';
@@ -178,36 +179,57 @@ export default function App() {
               activeProject={activeProject}
               activeThread={activeThread}
               view={view}
+              settingsSection={settingsSection}
               onRestoreDefaults={() => {
                 setSettingsSection('general');
                 settingsPanelRef.current?.restoreDefaults();
               }}
             />
-            {view === 'settings' ? (
-              <SettingsPanel
-                ref={settingsPanelRef}
-                section={settingsSection}
-                projects={projects}
-                archivedThreads={archivedThreads}
-                onRestoreDefaults={() => {}}
-                onUnarchiveThread={async (id) => {
-                  await window.electronAPI.db.unarchiveThread(id);
-                  await loadArchivedThreads();
-                }}
-                onDeleteThread={async (id) => {
-                  await window.electronAPI.db.deleteThread(id);
-                  await loadArchivedThreads();
-                }}
-              />
-            ) : (
-              <MainPanel
-                activeThread={activeThread}
-                activeProject={activeProject}
-                onAddThread={(title, mode) => {
-                  if (activeProject) handleAddThread(activeProject.id, title, mode);
-                }}
-              />
-            )}
+            <AnimatePresence mode="wait">
+              {view === 'settings' ? (
+                <motion.div
+                  key="settings"
+                  className="settings-motion-wrapper"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <SettingsPanel
+                    ref={settingsPanelRef}
+                    section={settingsSection}
+                    projects={projects}
+                    archivedThreads={archivedThreads}
+                    onRestoreDefaults={() => {}}
+                    onUnarchiveThread={async (id) => {
+                      await window.electronAPI.db.unarchiveThread(id);
+                      await loadArchivedThreads();
+                    }}
+                    onDeleteThread={async (id) => {
+                      await window.electronAPI.db.deleteThread(id);
+                      await loadArchivedThreads();
+                    }}
+                  />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="chat"
+                  className="chat-motion-wrapper"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <MainPanel
+                    activeThread={activeThread}
+                    activeProject={activeProject}
+                    onAddThread={(title, mode) => {
+                      if (activeProject) handleAddThread(activeProject.id, title, mode);
+                    }}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         }
       />

@@ -2087,8 +2087,9 @@ textarea {
 }
 
 .sidebar-settings-nav-item.active {
-  background: var(--accent-dim);
-  color: #fff;
+  background: rgba(88, 166, 255, 0.06);
+  color: var(--text-primary);
+  border-left: 2px solid var(--accent);
 }
 
 /* Settings label in topbar */
@@ -2465,6 +2466,119 @@ textarea {
   background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--border-light);
+}
+
+.archive-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+  min-height: 28px;
+}
+
+.archive-select-bar {
+  display: flex;
+  gap: 8px;
+}
+
+.archive-select-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  transition: all 0.15s;
+}
+
+.archive-select-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-light);
+}
+
+.archive-select-btn.secondary {
+  background: transparent;
+}
+
+.archive-bulk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+}
+
+.archive-selection-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.archive-bulk-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.archive-bulk-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  transition: all 0.15s;
+}
+
+.archive-bulk-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-light);
+}
+
+.archive-bulk-btn.danger:hover {
+  background: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+  border-color: rgba(248, 81, 73, 0.3);
+}
+
+.archive-card.selectable {
+  cursor: pointer;
+}
+
+.archive-card.selected {
+  background: rgba(88, 166, 255, 0.08);
+  border-color: var(--accent);
+}
+
+.archive-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.archive-check {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 2px solid var(--border-color);
+  transition: all 0.15s;
+}
+
+.archive-check.checked {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 /* ===== SELECTION ===== */

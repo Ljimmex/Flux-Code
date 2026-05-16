@@ -5,10 +5,11 @@ interface Props {
   activeProject: { name: string } | null;
   activeThread: { title: string; mode: string } | null;
   view?: 'chat' | 'settings';
+  settingsSection?: string;
   onRestoreDefaults?: () => void;
 }
 
-export default function TopBar({ activeProject, activeThread, view = 'chat', onRestoreDefaults }: Props) {
+export default function TopBar({ activeProject, activeThread, view = 'chat', settingsSection, onRestoreDefaults }: Props) {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -41,7 +42,7 @@ export default function TopBar({ activeProject, activeThread, view = 'chat', onR
       <div className="topbar-center drag-region" />
 
       <div className="topbar-right">
-        {view === 'settings' && onRestoreDefaults && (
+        {view === 'settings' && settingsSection === 'general' && onRestoreDefaults && (
           <button className="topbar-btn restore-btn" onClick={onRestoreDefaults} title="Restore defaults">
             <RotateCcw size={14} />
             <span>Restore defaults</span>
