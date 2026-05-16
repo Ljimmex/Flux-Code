@@ -133,6 +133,14 @@ export class DatabaseManager {
     for (const migration of MIGRATIONS) {
       this.db.exec(migration);
     }
+    // Add is_read column to threads if not exists (backward compat)
+    try {
+      this.db.exec('ALTER TABLE threads ADD COLUMN is_read INTEGER DEFAULT 1');
+      this.db.exec("UPDATE threads SET is_read = 1 WHERE is_read IS NULL");
+    } catch {
+      // Column already exists — ensure no nulls remain
+      this.db.exec("UPDATE threads SET is_read = 1 WHERE is_read IS NULL");
+    }
   }
 
   private seedBuiltInSkills(): void {
@@ -162,24 +170,37 @@ export class DatabaseManager {
 
   getThreads(projectId: number): any[] {
     if (!this.db) return [];
-    return this.db.prepare('SELECT * FROM threads WHERE project_id = ? ORDER BY updated_at DESC').all(projectId);
+    return this.db.prepare("SELECT * FROM threads WHERE project_id = ? AND status != 'archived' ORDER BY updated_at DESC").all(projectId);
   }
 
   addThread(projectId: number, title: string, mode: string = 'chat'): any {
     if (!this.db) return null;
-    const stmt = this.db.prepare('INSERT INTO threads (project_id, title, mode) VALUES (?, ?, ?)');
-    const result = stmt.run(projectId, title, mode);
+    const now = new Date().toISOString();
+    const stmt = this.db.prepare('INSERT INTO threads (project_id, title, mode, updated_at) VALUES (?, ?, ?, ?)');
+    const result = stmt.run(projectId, title, mode, now);
     return this.db.prepare('SELECT * FROM threads WHERE id = ?').get(result.lastInsertRowid);
   }
 
   renameThread(id: number, title: string): void {
     if (!this.db) return;
-    this.db.prepare('UPDATE threads SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(title, id);
+    const now = new Date().toISOString();
+    this.db.prepare('UPDATE threads SET title = ?, updated_at = ? WHERE id = ?').run(title, now, id);
+  }
+
+  markThreadRead(id: number): void {
+    if (!this.db) return;
+    this.db.prepare('UPDATE threads SET is_read = 1 WHERE id = ?').run(id);
+  }
+
+  markThreadUnread(id: number): void {
+    if (!this.db) return;
+    this.db.prepare('UPDATE threads SET is_read = 0 WHERE id = ?').run(id);
   }
 
   archiveThread(id: number): void {
     if (!this.db) return;
-    this.db.prepare('UPDATE threads SET status = ? WHERE id = ?').run('archived', id);
+    const now = new Date().toISOString();
+    this.db.prepare('UPDATE threads SET status = ?, updated_at = ? WHERE id = ?').run('archived', now, id);
   }
 
   deleteThread(id: number): void {

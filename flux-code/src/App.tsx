@@ -26,6 +26,7 @@ export interface Thread {
   branch_name: string | null;
   reasoning_level: number;
   access_level: string;
+  is_read: number;
   created_at: string;
   updated_at: string;
 }
@@ -102,6 +103,7 @@ export default function App() {
         sidebar={
           <ProjectSidebar
             projects={projects}
+            threads={threads}
             activeProject={activeProject}
             activeThread={activeThread}
             getProjectThreads={getProjectThreads}

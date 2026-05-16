@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowUp, Square, User, Bot, Lock } from './icons';
+import { useState, useEffect, useRef } from 'react';
+import { ArrowUp, Square, User, Bot, Lock, Check, Search } from './icons';
 import logo from '../Fluxavatar.png';
 import type { Thread, Project } from '../App';
 
@@ -9,10 +9,89 @@ interface Props {
   onAddThread: (title: string, mode?: string) => void;
 }
 
+const MODELS = [
+  { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI' },
+  { id: 'claude-4', name: 'Claude 4', provider: 'Anthropic' },
+  { id: 'deepseek', name: 'DeepSeek V4', provider: 'DeepSeek' },
+  { id: 'ollama', name: 'Ollama Local', provider: 'Local' },
+];
+
+const ACCESS_LEVELS = [
+  { id: 'supervised', label: 'Supervised', desc: 'Ask before commands and file changes.', icon: 'lock' },
+  { id: 'auto-edit', label: 'Auto-accept edits', desc: 'Auto-approve edits, ask before other actions.', icon: 'pencil' },
+  { id: 'full', label: 'Full access', desc: 'Allow commands and edits without prompts.', icon: 'lock' },
+] as const;
+
+const VARIANTS = ['Low', 'Medium', 'High'] as const;
+const AGENTS = ['Build', 'Plan'] as const;
+
+const FAV_MODELS_KEY = 'flux:favModels';
+
+function loadFavModels(): string[] {
+  try {
+    const raw = localStorage.getItem(FAV_MODELS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveFavModels(ids: string[]) {
+  localStorage.setItem(FAV_MODELS_KEY, JSON.stringify(ids));
+}
+
 export default function ChatPanel({ activeThread, activeProject, onAddThread }: Props) {
   const [input, setInput] = useState('');
   const [messages] = useState<any[]>([]);
   const isGenerating = false;
+
+  const [openDropdown, setOpenDropdown] = useState<null | 'model' | 'access' | 'variant'>(null);
+  const [selectedModel, setSelectedModel] = useState(MODELS[0]);
+  const [modelSearch, setModelSearch] = useState('');
+  const [selectedAccess, setSelectedAccess] = useState('full');
+  const [selectedVariant, setSelectedVariant] = useState('Medium');
+  const [selectedAgent, setSelectedAgent] = useState('Build');
+  const [favModels, setFavModels] = useState<string[]>(loadFavModels);
+
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  const toggleFav = (modelId: string) => {
+    setFavModels(prev => {
+      const next = prev.includes(modelId)
+        ? prev.filter(id => id !== modelId)
+        : [...prev, modelId];
+      saveFavModels(next);
+      return next;
+    });
+  };
+
+  // Global shortcuts for model selection (Ctrl+1..Ctrl+4)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && !e.altKey && !e.metaKey) {
+        const num = parseInt(e.key, 10);
+        if (!isNaN(num) && num >= 1 && num <= sortedModels.length) {
+          e.preventDefault();
+          setSelectedModel(sortedModels[num - 1]);
+        }
+      }
+      if (e.key === 'Escape') {
+        setOpenDropdown(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const handleSend = () => {
     if (!input.trim() || !activeThread) return;
@@ -53,6 +132,18 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     );
   }
 
+  const filteredModels = MODELS.filter(m =>
+    m.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
+    m.provider.toLowerCase().includes(modelSearch.toLowerCase())
+  );
+
+  const sortedModels = [...filteredModels].sort((a, b) => {
+    const aFav = favModels.includes(a.id) ? -1 : 0;
+    const bFav = favModels.includes(b.id) ? -1 : 0;
+    if (aFav !== bFav) return aFav - bFav;
+    return MODELS.findIndex(m => m.id === a.id) - MODELS.findIndex(m => m.id === b.id);
+  });
+
   return (
     <div className="chat-panel">
       <div className="chat-messages">
@@ -83,32 +174,142 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
             onKeyDown={handleKeyDown}
           />
 
-          <div className="chat-input-toolbar">
+          <div className="chat-input-toolbar" ref={toolbarRef}>
             <div className="toolbar-left">
-              <div className="toolbar-icon">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18" />
-                </svg>
+              {/* Model selector */}
+              <div className="toolbar-item-wrapper">
+                <button
+                  className="toolbar-btn"
+                  onClick={() => setOpenDropdown(openDropdown === 'model' ? null : 'model')}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18" />
+                  </svg>
+                  <span>{selectedModel.provider} · {selectedModel.name}</span>
+                </button>
+
+                {openDropdown === 'model' && (
+                  <div className="toolbar-dropdown model-dropdown">
+                    <div className="model-dropdown-header">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
+                      <span>{selectedModel.provider}</span>
+                    </div>
+                    <div className="toolbar-dropdown-search">
+                      <Search size={14} />
+                      <input
+                        autoFocus
+                        placeholder="Search models..."
+                        value={modelSearch}
+                        onChange={(e) => setModelSearch(e.target.value)}
+                      />
+                    </div>
+                    {sortedModels.map((model, i) => {
+                      const isFav = favModels.includes(model.id);
+                      return (
+                        <button
+                          key={model.id}
+                          className={`toolbar-dropdown-item ${selectedModel.id === model.id ? 'active' : ''}`}
+                          onClick={() => { setSelectedModel(model); setOpenDropdown(null); setModelSearch(''); }}
+                        >
+                          <span
+                            className={`model-fav-star ${isFav ? 'fav' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); toggleFav(model.id); }}
+                            title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                              <polygon
+                                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+                                fill={isFav ? 'currentColor' : 'none'}
+                              />
+                            </svg>
+                          </span>
+                          <span>{model.provider} · {model.name}</span>
+                          <span className="toolbar-dropdown-shortcut">Ctrl+{i + 1}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              <select className="toolbar-select">
-                <option>OpenCode...</option>
-                <option>DeepSeek...</option>
-                <option>Claude...</option>
-              </select>
+
               <span className="toolbar-sep">|</span>
-              <select className="toolbar-select">
-                <option>Medium · Build</option>
-                <option>Low · Read</option>
-                <option>High · Deploy</option>
-              </select>
-              <span className="toolbar-sep">|</span>
-              <div className="toolbar-icon">
-                <Lock size={12} />
+
+              {/* Variant/Agent selector */}
+              <div className="toolbar-item-wrapper">
+                <button
+                  className="toolbar-btn"
+                  onClick={() => setOpenDropdown(openDropdown === 'variant' ? null : 'variant')}
+                >
+                  <span>{selectedVariant} · {selectedAgent}</span>
+                </button>
+
+                {openDropdown === 'variant' && (
+                  <div className="toolbar-dropdown variant-dropdown">
+                    <div className="dropdown-section">
+                      <div className="dropdown-section-label">Variant</div>
+                      {VARIANTS.map(v => (
+                        <button
+                          key={v}
+                          className={`toolbar-dropdown-item ${selectedVariant === v ? 'active' : ''}`}
+                          onClick={() => setSelectedVariant(v)}
+                        >
+                          <span>{v}</span>
+                          {selectedVariant === v && <Check size={14} />}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="dropdown-section">
+                      <div className="dropdown-section-label">Agent</div>
+                      {AGENTS.map(a => (
+                        <button
+                          key={a}
+                          className={`toolbar-dropdown-item ${selectedAgent === a ? 'active' : ''}`}
+                          onClick={() => setSelectedAgent(a)}
+                        >
+                          <span>{a}</span>
+                          {selectedAgent === a && <Check size={14} />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <select className="toolbar-select">
-                <option>Full access</option>
-                <option>Supervised</option>
-              </select>
+
+              <span className="toolbar-sep">|</span>
+
+              {/* Access selector */}
+              <div className="toolbar-item-wrapper">
+                <button
+                  className="toolbar-btn"
+                  onClick={() => setOpenDropdown(openDropdown === 'access' ? null : 'access')}
+                >
+                  <Lock size={12} />
+                  <span>{ACCESS_LEVELS.find(a => a.id === selectedAccess)?.label}</span>
+                </button>
+
+                {openDropdown === 'access' && (
+                  <div className="toolbar-dropdown access-dropdown">
+                    {ACCESS_LEVELS.map(level => (
+                      <button
+                        key={level.id}
+                        className={`toolbar-dropdown-item access-item ${selectedAccess === level.id ? 'active' : ''}`}
+                        onClick={() => { setSelectedAccess(level.id); setOpenDropdown(null); }}
+                      >
+                        <div className="access-icon">
+                          {level.icon === 'lock' ? <Lock size={14} /> : (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                          )}
+                        </div>
+                        <div className="access-info">
+                          <span className="access-label">{level.label}</span>
+                          <span className="access-desc">{level.desc}</span>
+                        </div>
+                        {selectedAccess === level.id && <Check size={14} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {isGenerating ? (

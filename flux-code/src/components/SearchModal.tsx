@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, FileText, FolderPlus, Settings, ArrowUp, ArrowDown, CornerDownLeft, XIcon } from './icons';
+import { Search, FileText, FolderPlus, Settings, ArrowUp, ArrowDown, CornerDownLeft, XIcon, ArrowLeft, Folder } from './icons';
 import type { Project, Thread } from '../App';
 
 interface Props {
@@ -32,6 +32,7 @@ type Item = ActionItem | ThreadItem;
 export default function SearchModal({ projects, threads, activeThread, onSelectThread, onSelectProject, onAddProject, onAddThread, onClose }: Props) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [view, setView] = useState<'main' | 'projects'>('main');
   const inputRef = useRef<HTMLInputElement>(null);
   const itemsRef = useRef<Item[]>([]);
 
@@ -60,24 +61,31 @@ export default function SearchModal({ projects, threads, activeThread, onSelectT
     if (item.type === 'action') {
       if (item.id === 'add-project') {
         onAddProject();
+        onClose();
       } else if (item.id === 'new-thread-current') {
         const projectId = activeThread
           ? activeThread.project_id
           : (projects[0]?.id ?? 0);
         if (projectId) onAddThread(projectId);
+        onClose();
       } else if (item.id === 'new-thread-choose') {
-        const projectId = activeThread
-          ? activeThread.project_id
-          : (projects[0]?.id ?? 0);
-        if (projectId) onAddThread(projectId);
+        setView('projects');
+        setSelectedIndex(0);
+        return;
+      } else if (item.id === 'open-settings') {
+        onClose();
       }
-      onClose();
     } else if (item.type === 'thread') {
       onSelectThread(item.thread);
       if (item.project) onSelectProject(item.project);
       onClose();
     }
   }, [onAddProject, onAddThread, onClose, onSelectThread, onSelectProject, activeThread, projects]);
+
+  const handleSelectProject = useCallback((project: Project) => {
+    onAddThread(project.id);
+    onClose();
+  }, [onAddThread, onClose]);
 
   const items = getItems();
   itemsRef.current = items;
@@ -90,6 +98,11 @@ export default function SearchModal({ projects, threads, activeThread, onSelectT
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
+        if (view === 'projects') {
+          setView('main');
+          setSelectedIndex(0);
+          return;
+        }
         onClose();
         return;
       }
@@ -109,7 +122,42 @@ export default function SearchModal({ projects, threads, activeThread, onSelectT
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIndex, onClose, handleSelect]);
+  }, [selectedIndex, onClose, handleSelect, view]);
+
+  if (view === 'projects') {
+    return (
+      <div className="search-modal-overlay" onClick={onClose}>
+        <div className="search-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="search-modal-input-wrapper">
+            <button className="icon-btn" onClick={() => { setView('main'); setSelectedIndex(0); }}>
+              <ArrowLeft size={16} />
+            </button>
+            <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>Select project</span>
+          </div>
+
+          <div className="search-modal-section">
+            {projects.map((project, i) => (
+              <button
+                key={project.id}
+                className={`search-modal-item ${selectedIndex === i ? 'selected' : ''}`}
+                onClick={() => handleSelectProject(project)}
+                onMouseEnter={() => setSelectedIndex(i)}
+              >
+                <Folder size={14} />
+                <span className="search-modal-item-label">{project.name}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="search-modal-footer">
+            <span><ArrowUp size={10} /> <ArrowDown size={10} /> Navigate</span>
+            <span><CornerDownLeft size={10} /> Select</span>
+            <span><XIcon size={10} /> Back</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="search-modal-overlay" onClick={onClose}>
