@@ -105,23 +105,26 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
   );
 }
 
-/* ─── Settings row component ─── */
-function SettingRow({
+/* ─── Settings card component ─── */
+function SettingCard({
   title,
   desc,
   children,
+  controlPosition = 'inline',
 }: {
   title: string;
   desc?: string;
   children: React.ReactNode;
+  controlPosition?: 'inline' | 'bottom';
 }) {
   return (
-    <div className="setting-row">
-      <div className="setting-row-text">
-        <span className="setting-row-title">{title}</span>
-        {desc && <span className="setting-row-desc">{desc}</span>}
+    <div className="setting-card">
+      <div className="setting-card-header">
+        <span className="setting-card-title">{title}</span>
+        {controlPosition === 'inline' && <div className="setting-card-control">{children}</div>}
       </div>
-      <div className="setting-row-control">{children}</div>
+      {desc && <span className="setting-card-desc">{desc}</span>}
+      {controlPosition === 'bottom' && <div className="setting-card-control-bottom">{children}</div>}
     </div>
   );
 }
@@ -204,7 +207,9 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPa
           >
             {section === 'general' && (
               <>
-                <SettingRow title="Theme" desc="Choose how Flux Code looks across the app.">
+                <div className="settings-group-title">General</div>
+
+                <SettingCard title="Theme" desc="Choose how Flux Code looks across the app.">
                   <select
                     className="settings-select"
                     value={theme}
@@ -214,9 +219,9 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPa
                     <option value="light">Light</option>
                     <option value="system">System</option>
                   </select>
-                </SettingRow>
+                </SettingCard>
 
-                <SettingRow title="Time format" desc="System default follows your browser or OS clock preference.">
+                <SettingCard title="Time format" desc="System default follows your browser or OS clock preference.">
                   <select
                     className="settings-select"
                     value={timeFormat}
@@ -226,25 +231,25 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPa
                     <option value="12h">12-hour</option>
                     <option value="24h">24-hour</option>
                   </select>
-                </SettingRow>
+                </SettingCard>
 
-                <SettingRow title="Diff line wrapping" desc="Set the default wrap state when the diff panel opens.">
+                <SettingCard title="Diff line wrapping" desc="Set the default wrap state when the diff panel opens.">
                   <Toggle checked={diffWrap} onChange={() => setDiffWrap(v => !v)} />
-                </SettingRow>
+                </SettingCard>
 
-                <SettingRow title="Hide whitespace changes" desc="Set whether the diff panel ignores whitespace-only edits by default.">
+                <SettingCard title="Hide whitespace changes" desc="Set whether the diff panel ignores whitespace-only edits by default.">
                   <Toggle checked={hideWhitespace} onChange={() => setHideWhitespace(v => !v)} />
-                </SettingRow>
+                </SettingCard>
 
-                <SettingRow title="Assistant output" desc="Show token-by-token output while a response is in progress.">
+                <SettingCard title="Assistant output" desc="Show token-by-token output while a response is in progress.">
                   <Toggle checked={assistantOutput} onChange={() => setAssistantOutput(v => !v)} />
-                </SettingRow>
+                </SettingCard>
 
-                <SettingRow title="Auto-open task panel" desc="Open the right-side plan and task panel automatically when steps appear.">
+                <SettingCard title="Auto-open task panel" desc="Open the right-side plan and task panel automatically when steps appear.">
                   <Toggle checked={autoOpenTask} onChange={() => setAutoOpenTask(v => !v)} />
-                </SettingRow>
+                </SettingCard>
 
-                <SettingRow title="New threads" desc="Pick the default workspace mode for newly created draft threads.">
+                <SettingCard title="New threads" desc="Pick the default workspace mode for newly created draft threads.">
                   <select
                     className="settings-select"
                     value={newThreadsMode}
@@ -253,24 +258,54 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPa
                     <option value="local">Local</option>
                     <option value="worktree">Worktree</option>
                   </select>
-                </SettingRow>
+                </SettingCard>
 
-                <SettingRow title="Add project starts in" desc="Leave empty to use ~ when the Add Project browser opens.">
+                <SettingCard title="Add project starts in" desc="Leave empty to use ~ when the Add Project browser opens.">
                   <input
                     className="settings-input"
                     type="text"
                     placeholder="~/"
                     defaultValue="~/"
                   />
-                </SettingRow>
+                </SettingCard>
 
-                <SettingRow title="Archive confirmation" desc="Require a second click on the inline archive action before a thread is archived.">
+                <SettingCard title="Archive confirmation" desc="Require a second click on the inline archive action before a thread is archived.">
                   <Toggle checked={archiveConfirm} onChange={() => setArchiveConfirm(v => !v)} />
-                </SettingRow>
+                </SettingCard>
 
-                <SettingRow title="Delete confirmation" desc="Ask before deleting a thread and its chat history.">
+                <SettingCard title="Delete confirmation" desc="Ask before deleting a thread and its chat history.">
                   <Toggle checked={deleteConfirm} onChange={() => setDeleteConfirm(v => !v)} />
-                </SettingRow>
+                </SettingCard>
+
+                <SettingCard title="Text generation model" desc="Configure the model used for generated commit messages, PR titles, and similar Git text.">
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select className="settings-select" defaultValue="gpt-5.4-mini">
+                      <option value="gpt-5.4-mini">GPT-5.4-Mini</option>
+                      <option value="gpt-4">GPT-4</option>
+                    </select>
+                    <select className="settings-select" defaultValue="medium">
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                  </div>
+                </SettingCard>
+
+                <div className="settings-group-title">About</div>
+
+                <SettingCard title="Version" desc="Current version of the application.">
+                  <span className="settings-badge">Up to Date</span>
+                </SettingCard>
+
+                <SettingCard title="Update track" desc="Stable follows full releases. Nightly follows the nightly desktop channel and can switch back to stable immediately.">
+                  <select className="settings-select" defaultValue="stable">
+                    <option value="stable">Stable</option>
+                    <option value="nightly">Nightly</option>
+                  </select>
+                </SettingCard>
+
+                <SettingCard title="Diagnostics" desc="Local trace file.">
+                  <button className="settings-btn">View diagnostics</button>
+                </SettingCard>
               </>
             )}
 
