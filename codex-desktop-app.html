@@ -958,19 +958,19 @@
     <div class="sprint-header">Sprint 2: Three-Panel Layout <span style="color:var(--success)">✅</span></div>
     <p><em>Tydzień 3-4 | Solo dev</em></p>
 
-    <div class="task-item"><strong>TASK 2.1:</strong> Resizable Panel Container (react-resizable-panels) ✅</div>
+    <div class="task-item"><strong>TASK 2.1:</strong> Resizable Panel Container (custom implementation) <span style="color:var(--success)">✅</span></div>
     <p>Implementacja trzech-panelowego layoutu z shadcn/ui Resizable (lub react-resizable-panels): lewy panel (Projects, min 200px, max 350px), środkowy panel (Threads, min 250px, max 400px), prawy panel (Main Content, flex-1). Panele są resizable (drag dividers) i collapsible (przyciski zwiń/rozwiń). Persist state: rozmiary paneli zapisywane w localStorage i odtwarzane przy starcie.</p>
 
-    <div class="task-item"><strong>TASK 2.2:</strong> Project Sidebar z context menu ✅</div>
+    <div class="task-item"><strong>TASK 2.2:</strong> Project Sidebar z context menu <span style="color:var(--success)">✅</span></div>
     <p>Komponent <code>ProjectSidebar</code>: lista projektów z SQLite (mock dane na start). Każdy projekt: favicon/icon (generowana z pierwszej litery), nazwa (bold), ścieżka (truncated, gray), branch (badge). Przycisk "Add Project" — wywołuje Tauri <code>dialog.open</code> (folder picker) i zapisuje do SQLite. Aktywny projekt: podświetlenie primary color + border-left. Context menu (prawy klawisz): Remove, Refresh git status, Open in VS Code (przez <code>shell.open</code>). Pusta lista: "No projects yet" + CTA "Add your first project".</p>
 
-    <div class="task-item"><strong>TASK 2.3:</strong> Thread List z grupowaniem i context menu ✅</div>
+    <div class="task-item"><strong>TASK 2.3:</strong> Thread List z grupowaniem i context menu <span style="color:var(--success)">✅</span></div>
     <p>Komponent <code>ThreadList</code>: lista wątków dla wybranego projektu (z SQLite, mock dane). Każdy wątek: ikona statusu, tytuł, podtytuł (data/model), badge trybu (Chat/Plan). Grupowanie: "Running", "Today", "Yesterday", "This Week", "Older". Przycisk "New Thread" — tworzy nowy wątek w SQLite i przełącza do niego. Search bar do filtrowania wątków. Pusta lista: placeholder z CTA.</p>
 
-    <div class="task-item"><strong>TASK 2.4:</strong> Main Panel z Tabami (Chat, Diff, Terminal) ✅</div>
+    <div class="task-item"><strong>TASK 2.4:</strong> Main Panel (Chat z toolbar dropdowns, Diff/Terminal jako panele) <span style="color:var(--warning)">🟡 CZĘŚCIOWO</span></div>
     <p>Komponent <code>MainPanel</code>: obszar roboczy z tabami (shadcn Tabs): "Chat", "Diff", "Terminal". Domyślnie "Chat" (pusty placeholder na razie). Header z nazwą wątku, modelem (badge), i przyciskami (New Thread, Settings). Bottom bar (status): wersja app, połączenie, token usage (placeholder).</p>
 
-    <div class="task-item"><strong>TASK 2.5:</strong> Top Bar i Status Bar z model selector ✅</div>
+    <div class="task-item"><strong>TASK 2.5:</strong> Top Bar z model selector + custom window controls <span style="color:var(--warning)">🟡 CZĘŚCIOWO</span> (Status Bar usunięty)</div>
     <p><strong>TopBar</strong>: nazwa aplikacji + ikona, breadcrumb (Project / Thread), przycisk nowego wątku, selector modelu (dropdown placeholder), settings gear.<br><strong>StatusBar</strong>: lewa strona (status online/offline), środek (aktualny model, liczba aktywnych agentów), prawa strona (token usage placeholder). Sticky na dole okna.</p>
 
     <h4>Kryteria Akceptacji Sprintu 2</h4>
@@ -985,19 +985,19 @@
     <div class="sprint-header">Sprint 3: UI Polish i Theme</div>
     <p><em>Tydzień 5-6 | Solo dev</em></p>
 
-    <div class="task-item"><strong>TASK 3.1:</strong> Dark/Light Theme</div>
+    <div class="task-item"><strong>TASK 3.1:</strong> Dark/Light Theme <span style="color:var(--success)">✅</span></div>
     <p>Implementacja systemu themingu przez next-themes (lub custom): dark (default), light, system. Kolory dostosowane do obu motywów. Native window decorations: macOS (vibrancy, transparent titlebar), Windows (Mica material). Persist theme w Tauri Store. Toggle w settings.</p>
 
-    <div class="task-item"><strong>TASK 3.2:</strong> Native Window Controls</div>
+    <div class="task-item"><strong>TASK 3.2:</strong> Native Window Controls + Keyboard Shortcuts <span style="color:var(--warning)">🟡 CZĘŚCIOWO</span> (Window controls ✅, skróty klawiszowe ✅)</div>
     <p>macOS: traffic lights po lewej, titlebar hidden (overlay style), vibrancy effect. Windows: standardowe kontrolki, custom titlebar dla spójności. Linux: GTK decorations. Keyboard shortcuts: <code>Cmd/Ctrl + ,</code> (settings), <code>Cmd/Ctrl + N</code> (nowy wątek), <code>Cmd/Ctrl + Shift + N</code> (nowy projekt), <code>Cmd/Ctrl + B</code> (toggle sidebar). Skróty konfigurowalne w settings.</p>
 
-    <div class="task-item"><strong>TASK 3.3:</strong> Settings UI</div>
+    <div class="task-item"><strong>TASK 3.3:</strong> Settings UI <span style="color:var(--success)">✅</span></div>
     <p>Strona ustawień (modal lub osobny widok): General (theme, font size), AI Models (lista skonfigurowanych — placeholder), Skills (placeholder), Projects (lista, można usuwać), Keyboard Shortcuts (placeholder), Advanced (placeholder). Zapis ustawień do SQLite + Tauri Store.</p>
 
-    <div class="task-item"><strong>TASK 3.4:</strong> Context Menu i Popovers</div>
+    <div class="task-item"><strong>TASK 3.4:</strong> Context Menu i Popovers <span style="color:var(--success)">✅</span></div>
     <p>Kontekstowe menu (prawy klawisz) dla: projektów (Remove, Open in Finder, Open in VS Code), wątków (Rename, Duplicate, Archive, Delete), wiadomości (Copy, Delete). shadcn DropdownMenu + shadcn ContextMenu.</p>
 
-    <div class="task-item"><strong>TASK 3.5:</strong> Empty States i Loading</div>
+    <div class="task-item"><strong>TASK 3.5:</strong> Empty States i Loading <span style="color:var(--warning)">🟡 CZĘŚCIOWO</span> (Empty states ✅, Loading skeletons ✅, Animacje ✅)</div>
     <p>Spójne empty state components: "No projects yet" z CTA, "No threads" z CTA, "Select a project" (gdy brak wybranego projektu). Loading skeletons (shadcn Skeleton) dla list podczas fetchowania. Animacje przejść (Framer Motion): fade-in dla nowych elementów, slide dla paneli.</p>
 
     <h4>Kryteria Akceptacji Sprintu 3</h4>

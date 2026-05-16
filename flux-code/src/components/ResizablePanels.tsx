@@ -67,7 +67,7 @@ export default function ResizablePanels({ sidebar, main, sidebarVisible }: Props
     };
   }, [sidebarPercent]);
 
-  const mainPercent = 100 - sidebarPercent;
+  const mainPercent = sidebarVisible ? 100 - sidebarPercent : 100;
 
   return (
     <div ref={containerRef} className="resizable-container" style={{ display: 'flex', flexDirection: 'row', width: '100%', height: '100%' }}>
