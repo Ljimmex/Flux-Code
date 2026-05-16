@@ -10,6 +10,8 @@ export interface ElectronAPI {
     renameThread: (id: number, title: string) => Promise<void>;
     archiveThread: (id: number) => Promise<void>;
     deleteThread: (id: number) => Promise<void>;
+    markThreadRead: (id: number) => Promise<void>;
+    markThreadUnread: (id: number) => Promise<void>;
     renameProject: (id: number, name: string) => Promise<void>;
     getSettings: () => Promise<Record<string, string>>;
     setSetting: (key: string, value: string) => Promise<void>;
@@ -39,6 +41,8 @@ const api: ElectronAPI = {
     renameThread: (id, title) => ipcRenderer.invoke('db:renameThread', id, title),
     archiveThread: (id) => ipcRenderer.invoke('db:archiveThread', id),
     deleteThread: (id) => ipcRenderer.invoke('db:deleteThread', id),
+    markThreadRead: (id) => ipcRenderer.invoke('db:markThreadRead', id),
+    markThreadUnread: (id) => ipcRenderer.invoke('db:markThreadUnread', id),
     renameProject: (id, name) => ipcRenderer.invoke('db:renameProject', id, name),
     getSettings: () => ipcRenderer.invoke('db:getSettings'),
     setSetting: (key, value) => ipcRenderer.invoke('db:setSetting', key, value),

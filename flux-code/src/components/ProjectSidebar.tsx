@@ -2,13 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import {
   FolderPlus, Trash2, FolderGit2, Settings,
   Folder, ChevronDown, ChevronRight,
-  Plus, Archive, Edit3, Copy, Check, MoreHorizontal, Minus, Search
+  Plus, Archive, Edit3, Copy, Check, MoreHorizontal, Minus, Search, Mail, MailOpen,
+  AlertTriangle
 } from './icons';
 import logo from '../Fluxavatar.png';
 import type { Project, Thread } from '../App';
 
 interface Props {
   projects: Project[];
+  threads: Thread[];
   activeProject: Project | null;
   activeThread: Thread | null;
   getProjectThreads: (projectId: number) => Thread[];
@@ -35,30 +37,64 @@ interface ThreadMenuPos {
   projectId: number;
 }
 
-const modeColors: Record<string, string> = {
-  chat: '#58a6ff',
-  plan: '#d29922',
-  worktree: '#3fb950',
-};
+type ProjectSort = 'lastMessage' | 'createdAt' | 'name' | 'manual';
+type ThreadSort = 'lastMessage' | 'createdAt';
+type GroupBy = 'none' | 'repository';
 
-function formatRelativeTime(dateStr: string): string {
+const STORAGE_KEY = 'flux-code:sidebar-options';
+
+interface SidebarOptions {
+  projectSort: ProjectSort;
+  threadSort: ThreadSort;
+  visibleThreadCount: number;
+  groupBy: GroupBy;
+}
+
+function loadOptions(): SidebarOptions {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {
+    projectSort: 'lastMessage',
+    threadSort: 'lastMessage',
+    visibleThreadCount: 10,
+    groupBy: 'none',
+  };
+}
+
+function saveOptions(opts: SidebarOptions) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(opts));
+}
+
+function formatDateTime(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
+  const isToday = date.toDateString() === now.toDateString();
+  const isYesterday = new Date(now.getTime() - 86400000).toDateString() === date.toDateString();
 
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHour < 24) return `${diffHour}h ago`;
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return date.toLocaleDateString();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+
+  if (isToday) return `${hours}:${minutes}`;
+  if (isYesterday) return `Yesterday, ${hours}:${minutes}`;
+
+  const month = date.toLocaleDateString('en-US', { month: 'short' });
+  const day = date.getDate();
+
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${month} ${day}, ${hours}:${minutes}`;
+  }
+  return `${month} ${day} ${date.getFullYear()}, ${hours}:${minutes}`;
 }
+
+type ConfirmAction =
+  | { type: 'deleteThread'; threadId: number; projectId: number; title: string }
+  | { type: 'removeProject'; projectId: number; name: string };
 
 export default function ProjectSidebar({
   projects,
+  threads,
   activeProject,
   activeThread,
   getProjectThreads,
@@ -72,6 +108,7 @@ export default function ProjectSidebar({
   onOpenSearch,
 }: Props) {
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<number>>(new Set());
+  const [expandedThreadLists, setExpandedThreadLists] = useState<Set<number>>(new Set());
   const [projectMenu, setProjectMenu] = useState<ProjectMenuPos | null>(null);
   const [threadMenu, setThreadMenu] = useState<ThreadMenuPos | null>(null);
   const [sidebarOptionsOpen, setSidebarOptionsOpen] = useState(false);
@@ -79,18 +116,54 @@ export default function ProjectSidebar({
   const [renamingThread, setRenamingThread] = useState<number | null>(null);
   const [renamingProject, setRenamingProject] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [opts, setOpts] = useState<SidebarOptions>(loadOptions);
+  const [exitingThreads, setExitingThreads] = useState<Set<number>>(new Set());
+  const [enteringThreads, setEnteringThreads] = useState<Set<number>>(new Set());
+  const [confirmModal, setConfirmModal] = useState<ConfirmAction | null>(null);
+
   const optionsRef = useRef<HTMLDivElement>(null);
   const optionsBtnRef = useRef<HTMLButtonElement>(null);
+  const projectMenuRef = useRef<HTMLDivElement>(null);
+  const threadMenuRef = useRef<HTMLDivElement>(null);
   const renamingThreadProjectId = useRef<number | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const prevThreadsRef = useRef<Thread[]>([]);
+
+  // Detect newly added threads for enter animation
+  useEffect(() => {
+    const prevIds = new Set(prevThreadsRef.current.map(t => t.id));
+    const newIds = threads.filter(t => !prevIds.has(t.id)).map(t => t.id);
+
+    if (newIds.length > 0) {
+      setEnteringThreads(prev => new Set([...prev, ...newIds]));
+      setTimeout(() => {
+        setEnteringThreads(prev => {
+          const next = new Set(prev);
+          newIds.forEach(id => next.delete(id));
+          return next;
+        });
+      }, 350);
+    }
+
+    prevThreadsRef.current = threads;
+  }, [threads]);
+
+  // Focus rename input when it appears
+  useEffect(() => {
+    if (renamingThread !== null || renamingProject !== null) {
+      setTimeout(() => renameInputRef.current?.focus(), 50);
+    }
+  }, [renamingThread, renamingProject]);
 
   // Close menus on outside click using mousedown + ref
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
       const target = e.target as Node;
-      // Don't close if clicking inside the options menu or the options button
       if (
         optionsRef.current?.contains(target) ||
-        optionsBtnRef.current?.contains(target)
+        optionsBtnRef.current?.contains(target) ||
+        projectMenuRef.current?.contains(target) ||
+        threadMenuRef.current?.contains(target)
       ) {
         return;
       }
@@ -113,6 +186,51 @@ export default function ProjectSidebar({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onOpenSearch]);
+
+  const updateOpts = (patch: Partial<SidebarOptions>) => {
+    const next = { ...opts, ...patch };
+    setOpts(next);
+    saveOptions(next);
+  };
+
+  const getLastThreadDate = (projectId: number): number => {
+    const list = getProjectThreads(projectId);
+    if (list.length === 0) {
+      const proj = projects.find(p => p.id === projectId);
+      return proj ? new Date(proj.created_at).getTime() : 0;
+    }
+    return Math.max(...list.map(t => new Date(t.updated_at).getTime()));
+  };
+
+  const sortedProjects = (() => {
+    const list = [...projects];
+    switch (opts.projectSort) {
+      case 'name':
+        return list.sort((a, b) => a.name.localeCompare(b.name));
+      case 'createdAt':
+        return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      case 'lastMessage':
+        return list.sort((a, b) => getLastThreadDate(b.id) - getLastThreadDate(a.id));
+      case 'manual':
+      default:
+        return list;
+    }
+  })();
+
+  const getSortedThreads = (projectId: number): Thread[] => {
+    const list = [...getProjectThreads(projectId)];
+    switch (opts.threadSort) {
+      case 'createdAt':
+        list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        break;
+      case 'lastMessage':
+      default:
+        list.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+        break;
+    }
+    const isExpanded = expandedThreadLists.has(projectId);
+    return isExpanded ? list : list.slice(0, opts.visibleThreadCount);
+  };
 
   const toggleProject = async (project: Project) => {
     const newSet = new Set(expandedProjectIds);
@@ -140,19 +258,38 @@ export default function ProjectSidebar({
     setThreadMenu({ x: e.clientX, y: e.clientY, threadId, projectId });
   };
 
-  const handleArchiveThread = async (threadId: number) => {
-    await window.electronAPI.db.archiveThread(threadId);
-    const projectId = activeProject?.id;
-    if (projectId) await loadThreads(projectId);
+  const requestArchiveThread = (threadId: number, projectId: number) => {
+    setExitingThreads(prev => new Set(prev).add(threadId));
     setThreadMenu(null);
+    setTimeout(async () => {
+      await window.electronAPI.db.archiveThread(threadId);
+      await loadThreads(projectId);
+      setExitingThreads(prev => {
+        const next = new Set(prev);
+        next.delete(threadId);
+        return next;
+      });
+    }, 280);
   };
 
-  const handleDeleteThread = async (threadId: number) => {
-    await window.electronAPI.db.deleteThread(threadId);
-    const projectId = activeProject?.id;
-    if (projectId) await loadThreads(projectId);
-    if (activeThread?.id === threadId) onSelectThread({} as Thread);
+  const requestDeleteThread = (threadId: number, projectId: number) => {
+    setExitingThreads(prev => new Set(prev).add(threadId));
     setThreadMenu(null);
+    setTimeout(async () => {
+      await window.electronAPI.db.deleteThread(threadId);
+      await loadThreads(projectId);
+      if (activeThread?.id === threadId) onSelectThread({} as Thread);
+      setExitingThreads(prev => {
+        const next = new Set(prev);
+        next.delete(threadId);
+        return next;
+      });
+    }, 280);
+  };
+
+  const requestRemoveProject = (projectId: number) => {
+    onRemoveProject(projectId);
+    setProjectMenu(null);
   };
 
   const handleRenameThread = async (threadId: number) => {
@@ -184,6 +321,20 @@ export default function ProjectSidebar({
     setRenamingProject(project.id);
     setRenameValue(project.name);
     setProjectMenu(null);
+  };
+
+  const handleMarkRead = async (threadId: number) => {
+    await window.electronAPI.db.markThreadRead(threadId);
+    const projectId = activeProject?.id ?? threadMenu?.projectId;
+    if (projectId) await loadThreads(projectId);
+    setThreadMenu(null);
+  };
+
+  const handleMarkUnread = async (threadId: number) => {
+    await window.electronAPI.db.markThreadUnread(threadId);
+    const projectId = activeProject?.id ?? threadMenu?.projectId;
+    if (projectId) await loadThreads(projectId);
+    setThreadMenu(null);
   };
 
   const projMenuProject = projectMenu ? projects.find(p => p.id === projectMenu.projectId) : null;
@@ -224,28 +375,44 @@ export default function ProjectSidebar({
               <div ref={optionsRef} className="sidebar-options-menu">
                 <div className="options-section">
                   <div className="options-label">Sort projects</div>
-                  <button className="options-item active"><Check size={12} /> Last user message</button>
-                  <button className="options-item">Created at</button>
-                  <button className="options-item">Manual</button>
+                  <button className={`options-item ${opts.projectSort === 'lastMessage' ? 'active' : ''}`} onClick={() => updateOpts({ projectSort: 'lastMessage' })}>
+                    {opts.projectSort === 'lastMessage' && <Check size={12} />} Last user message
+                  </button>
+                  <button className={`options-item ${opts.projectSort === 'createdAt' ? 'active' : ''}`} onClick={() => updateOpts({ projectSort: 'createdAt' })}>
+                    {opts.projectSort === 'createdAt' && <Check size={12} />} Created at
+                  </button>
+                  <button className={`options-item ${opts.projectSort === 'name' ? 'active' : ''}`} onClick={() => updateOpts({ projectSort: 'name' })}>
+                    {opts.projectSort === 'name' && <Check size={12} />} Name
+                  </button>
+                  <button className={`options-item ${opts.projectSort === 'manual' ? 'active' : ''}`} onClick={() => updateOpts({ projectSort: 'manual' })}>
+                    {opts.projectSort === 'manual' && <Check size={12} />} Manual
+                  </button>
                 </div>
                 <div className="options-section">
                   <div className="options-label">Sort threads</div>
-                  <button className="options-item active"><Check size={12} /> Last user message</button>
-                  <button className="options-item">Created at</button>
+                  <button className={`options-item ${opts.threadSort === 'lastMessage' ? 'active' : ''}`} onClick={() => updateOpts({ threadSort: 'lastMessage' })}>
+                    {opts.threadSort === 'lastMessage' && <Check size={12} />} Last user message
+                  </button>
+                  <button className={`options-item ${opts.threadSort === 'createdAt' ? 'active' : ''}`} onClick={() => updateOpts({ threadSort: 'createdAt' })}>
+                    {opts.threadSort === 'createdAt' && <Check size={12} />} Created at
+                  </button>
                 </div>
                 <div className="options-section">
                   <div className="options-label">Visible threads</div>
                   <div className="options-counter">
-                    <button className="counter-btn"><Minus size={12} /></button>
-                    <span className="counter-value">6</span>
-                    <button className="counter-btn"><Plus size={12} /></button>
+                    <button className="counter-btn" onClick={() => updateOpts({ visibleThreadCount: Math.max(1, opts.visibleThreadCount - 1) })}><Minus size={12} /></button>
+                    <span className="counter-value">{opts.visibleThreadCount}</span>
+                    <button className="counter-btn" onClick={() => updateOpts({ visibleThreadCount: Math.min(30, opts.visibleThreadCount + 1) })}><Plus size={12} /></button>
                   </div>
                 </div>
                 <div className="options-section">
                   <div className="options-label">Group projects</div>
-                  <button className="options-item active"><Check size={12} /> Group by repository</button>
-                  <button className="options-item">Group by repository path</button>
-                  <button className="options-item">Keep separate</button>
+                  <button className={`options-item ${opts.groupBy === 'repository' ? 'active' : ''}`} onClick={() => updateOpts({ groupBy: 'repository' })}>
+                    {opts.groupBy === 'repository' && <Check size={12} />} Group by repository
+                  </button>
+                  <button className={`options-item ${opts.groupBy === 'none' ? 'active' : ''}`} onClick={() => updateOpts({ groupBy: 'none' })}>
+                    {opts.groupBy === 'none' && <Check size={12} />} Keep separate
+                  </button>
                 </div>
               </div>
             )}
@@ -262,9 +429,9 @@ export default function ProjectSidebar({
           </div>
         )}
 
-        {projects.map((project) => {
+        {sortedProjects.map((project) => {
           const isExpanded = expandedProjectIds.has(project.id);
-          const projectThreads = getProjectThreads(project.id);
+          const projectThreads = getSortedThreads(project.id);
 
           return (
             <div key={project.id} className="project-group">
@@ -279,8 +446,8 @@ export default function ProjectSidebar({
                 <div className="project-icon-sm"><Folder size={12} /></div>
                 {renamingProject === project.id ? (
                   <input
+                    ref={renameInputRef}
                     className="rename-input"
-                    autoFocus
                     value={renameValue}
                     onChange={(e) => setRenameValue(e.target.value)}
                     onBlur={() => handleRenameProject(project.id)}
@@ -320,10 +487,13 @@ export default function ProjectSidebar({
                   {projectThreads.map((thread) => {
                     const isThreadActive = activeThread?.id === thread.id;
                     const isHovered = hoveredThreadId === thread.id;
+                    const isUnread = thread.is_read === 0;
+                    const isExiting = exitingThreads.has(thread.id);
+                    const isEntering = enteringThreads.has(thread.id);
                     return (
                       <div
                         key={thread.id}
-                        className={`thread-row ${isThreadActive ? 'active' : ''}`}
+                        className={`thread-row ${isThreadActive ? 'active' : ''} ${isUnread ? 'unread' : ''} ${isExiting ? 'exiting' : ''} ${isEntering ? 'entering' : ''}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           onSelectThread(thread);
@@ -335,8 +505,8 @@ export default function ProjectSidebar({
                       >
                         {renamingThread === thread.id ? (
                           <input
+                            ref={renameInputRef}
                             className="rename-input thread-rename"
-                            autoFocus
                             value={renameValue}
                             onChange={(e) => setRenameValue(e.target.value)}
                             onBlur={() => handleRenameThread(thread.id)}
@@ -348,30 +518,53 @@ export default function ProjectSidebar({
                           />
                         ) : (
                           <>
-                            <span className="thread-row-title">{thread.title}</span>
+                            {isUnread && <span className="thread-unread-dot" />}
+                            <span className={`thread-row-title ${isUnread ? 'unread' : ''}`}>{thread.title}</span>
                             {isHovered ? (
                               <button
                                 className="thread-archive-btn"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleArchiveThread(thread.id);
+                                  requestArchiveThread(thread.id, project.id);
                                 }}
                                 title="Archive"
                               >
                                 <Archive size={12} />
                               </button>
                             ) : (
-                              <span className="thread-row-time">{formatRelativeTime(thread.updated_at)}</span>
+                              <span className="thread-row-time">{formatDateTime(thread.updated_at)}</span>
                             )}
-                            <span
-                              className="thread-row-dot"
-                              style={{ background: modeColors[thread.mode] || '#6e7681' }}
-                            />
                           </>
                         )}
                       </div>
                     );
                   })}
+                  {getProjectThreads(project.id).length > opts.visibleThreadCount && !expandedThreadLists.has(project.id) && (
+                    <button
+                      className="thread-row more-threads"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedThreadLists(prev => new Set(prev).add(project.id));
+                      }}
+                    >
+                      <span>+{getProjectThreads(project.id).length - opts.visibleThreadCount} more</span>
+                    </button>
+                  )}
+                  {expandedThreadLists.has(project.id) && getProjectThreads(project.id).length > opts.visibleThreadCount && (
+                    <button
+                      className="thread-row more-threads"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedThreadLists(prev => {
+                          const next = new Set(prev);
+                          next.delete(project.id);
+                          return next;
+                        });
+                      }}
+                    >
+                      <span>-{getProjectThreads(project.id).length - opts.visibleThreadCount} less</span>
+                    </button>
+                  )}
                   {projectThreads.length > 0 && (
                     <button
                       className="thread-row add-thread-row"
@@ -401,6 +594,7 @@ export default function ProjectSidebar({
       {/* Project Context Menu */}
       {projectMenu && projMenuProject && (
         <div
+          ref={projectMenuRef}
           className="context-menu"
           style={{ left: projectMenu.x, top: projectMenu.y }}
           onClick={(e) => e.stopPropagation()}
@@ -418,7 +612,7 @@ export default function ProjectSidebar({
             <span>Copy Project Path</span>
           </button>
           <div className="context-sep" />
-          <button className="context-item danger" onClick={() => { onRemoveProject(projMenuProject.id); setProjectMenu(null); }}>
+          <button className="context-item danger" onClick={() => { setConfirmModal({ type: 'removeProject', projectId: projMenuProject.id, name: projMenuProject.name }); setProjectMenu(null); }}>
             <Trash2 size={14} />
             <span>Remove Project</span>
           </button>
@@ -428,6 +622,7 @@ export default function ProjectSidebar({
       {/* Thread Context Menu */}
       {threadMenu && threadMenuThread && (
         <div
+          ref={threadMenuRef}
           className="context-menu"
           style={{ left: threadMenu.x, top: threadMenu.y }}
           onClick={(e) => e.stopPropagation()}
@@ -436,10 +631,17 @@ export default function ProjectSidebar({
             <Edit3 size={14} />
             <span>Rename thread</span>
           </button>
-          <button className="context-item" onClick={() => { setThreadMenu(null); }}>
-            <Check size={14} />
-            <span>Mark Unread</span>
-          </button>
+          {threadMenuThread.is_read === 0 ? (
+            <button className="context-item" onClick={() => handleMarkRead(threadMenuThread.id)}>
+              <MailOpen size={14} />
+              <span>Mark Read</span>
+            </button>
+          ) : (
+            <button className="context-item" onClick={() => handleMarkUnread(threadMenuThread.id)}>
+              <Mail size={14} />
+              <span>Mark Unread</span>
+            </button>
+          )}
           <button className="context-item" onClick={() => { navigator.clipboard.writeText(threadMenuThread.title); setThreadMenu(null); }}>
             <Copy size={14} />
             <span>Copy path</span>
@@ -449,10 +651,45 @@ export default function ProjectSidebar({
             <span>Copy Path ID</span>
           </button>
           <div className="context-sep" />
-          <button className="context-item danger" onClick={() => handleDeleteThread(threadMenuThread.id)}>
+          <button className="context-item danger" onClick={() => { setConfirmModal({ type: 'deleteThread', threadId: threadMenuThread.id, projectId: threadMenu.projectId, title: threadMenuThread.title }); setThreadMenu(null); }}>
             <Trash2 size={14} />
             <span>Delete</span>
           </button>
+        </div>
+      )}
+
+      {/* Confirm Modal */}
+      {confirmModal && (
+        <div className="confirm-modal-overlay" onClick={() => setConfirmModal(null)}>
+          <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-modal-icon">
+              <AlertTriangle size={28} />
+            </div>
+            <h3 className="confirm-modal-title">
+              {confirmModal.type === 'deleteThread' ? 'Delete Thread' : 'Remove Project'}
+            </h3>
+            <p className="confirm-modal-desc">
+              {confirmModal.type === 'deleteThread'
+                ? `Are you sure you want to delete "${confirmModal.title}"? This action cannot be undone.`
+                : `Are you sure you want to remove "${confirmModal.name}"? All associated threads will also be removed.`}
+            </p>
+            <div className="confirm-modal-actions">
+              <button className="confirm-btn secondary" onClick={() => setConfirmModal(null)}>Cancel</button>
+              <button
+                className="confirm-btn danger"
+                onClick={() => {
+                  if (confirmModal.type === 'deleteThread') {
+                    requestDeleteThread(confirmModal.threadId, confirmModal.projectId);
+                  } else {
+                    requestRemoveProject(confirmModal.projectId);
+                  }
+                  setConfirmModal(null);
+                }}
+              >
+                {confirmModal.type === 'deleteThread' ? 'Delete' : 'Remove'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </aside>
