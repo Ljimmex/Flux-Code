@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  FolderPlus, Trash2, FolderGit2, Settings,
+  FolderPlus, Trash2, FolderGit2, Settings, ArrowLeft,
   Folder, ChevronDown, ChevronRight,
   Plus, Archive, Edit3, Copy, Check, MoreHorizontal, Minus, Search, Mail, MailOpen,
   AlertTriangle
@@ -23,6 +23,8 @@ interface Props {
   loadProjects: () => Promise<void>;
   onOpenSearch: () => void;
   onOpenSettings: () => void;
+  view?: 'chat' | 'settings';
+  onBack?: () => void;
 }
 
 interface ProjectMenuPos {
@@ -108,6 +110,8 @@ export default function ProjectSidebar({
   loadProjects,
   onOpenSearch,
   onOpenSettings,
+  view = 'chat',
+  onBack,
 }: Props) {
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<number>>(new Set());
   const [expandedThreadLists, setExpandedThreadLists] = useState<Set<number>>(new Set());
@@ -602,10 +606,17 @@ export default function ProjectSidebar({
       </div>
 
       <div className="sidebar-nav">
-        <button className="nav-item" onClick={onOpenSettings}>
-          <Settings size={14} />
-          <span>Settings</span>
-        </button>
+        {view === 'settings' ? (
+          <button className="nav-item" onClick={onBack}>
+            <ArrowLeft size={14} />
+            <span>Back</span>
+          </button>
+        ) : (
+          <button className="nav-item" onClick={onOpenSettings}>
+            <Settings size={14} />
+            <span>Settings</span>
+          </button>
+        )}
       </div>
 
       {/* Project Context Menu */}

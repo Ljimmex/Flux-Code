@@ -157,6 +157,8 @@ export default function App() {
             loadProjects={loadProjects}
             onOpenSearch={() => setSearchOpen(true)}
             onOpenSettings={() => setView('settings')}
+            view={view}
+            onBack={() => setView('chat')}
           />
         }
         main={
@@ -165,11 +167,9 @@ export default function App() {
               activeProject={activeProject}
               activeThread={activeThread}
               view={view}
-              onRestoreDefaults={() => { /* handled inside SettingsPanel */ }}
             />
             {view === 'settings' ? (
               <SettingsPanel
-                onBack={() => setView('chat')}
                 projects={projects}
                 onRemoveProject={handleRemoveProject}
                 onRestoreDefaults={() => {}}

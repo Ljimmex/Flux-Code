@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
-import { GitCompare, Terminal, RotateCcw } from './icons';
+import { GitCompare, Terminal } from './icons';
 
 interface Props {
   activeProject: { name: string } | null;
   activeThread: { title: string; mode: string } | null;
   view?: 'chat' | 'settings';
-  onRestoreDefaults?: () => void;
 }
 
-export default function TopBar({ activeProject, activeThread, view = 'chat', onRestoreDefaults }: Props) {
+export default function TopBar({ activeProject, activeThread, view = 'chat' }: Props) {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -41,12 +40,6 @@ export default function TopBar({ activeProject, activeThread, view = 'chat', onR
       <div className="topbar-center drag-region" />
 
       <div className="topbar-right">
-        {view === 'settings' && onRestoreDefaults && (
-          <button className="topbar-btn restore-btn" onClick={onRestoreDefaults} title="Restore defaults">
-            <RotateCcw size={14} />
-            <span>Restore defaults</span>
-          </button>
-        )}
         {view === 'chat' && (
           <>
             <button className="topbar-btn" title="Open diff panel">

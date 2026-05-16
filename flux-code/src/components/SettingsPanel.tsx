@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft, SlidersHorizontal, Keyboard, Cpu, GitBranch,
+  SlidersHorizontal, Keyboard, Cpu, GitBranch,
   Globe, Archive, Check
 } from './icons';
 import type { Project } from '../App';
 
 interface Props {
-  onBack: () => void;
   projects: Project[];
   onRemoveProject: (id: number) => void;
   onRestoreDefaults: () => void;
@@ -132,7 +131,7 @@ const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ size?:
   { id: 'archive', label: 'Archive', icon: Archive },
 ];
 
-export default function SettingsPanel({ onBack, projects, onRemoveProject, onRestoreDefaults }: Props) {
+export default function SettingsPanel({ projects, onRemoveProject, onRestoreDefaults }: Props) {
   const [section, setSection] = useState<Section>('general');
   const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(loadTheme);
   const [shortcuts, setShortcuts] = useState<ShortcutConfig[]>(loadShortcuts);
@@ -197,10 +196,6 @@ export default function SettingsPanel({ onBack, projects, onRemoveProject, onRes
             </button>
           ))}
         </div>
-        <button className="settings-view-back" onClick={onBack}>
-          <ArrowLeft size={14} />
-          <span>Back</span>
-        </button>
       </aside>
 
       {/* Right content */}
@@ -208,10 +203,12 @@ export default function SettingsPanel({ onBack, projects, onRemoveProject, onRes
         {/* Header */}
         <div className="settings-view-header">
           <h2 className="settings-view-section-title">{activeLabel.toUpperCase()}</h2>
-          <button className="settings-restore-btn" onClick={handleRestore}>
-            <Check size={14} />
-            <span>Restore defaults</span>
-          </button>
+          {section === 'general' && (
+            <button className="settings-restore-btn" onClick={handleRestore}>
+              <Check size={14} />
+              <span>Restore defaults</span>
+            </button>
+          )}
         </div>
 
         <AnimatePresence mode="wait">
