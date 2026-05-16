@@ -4,7 +4,7 @@ import ProjectSidebar from './components/ProjectSidebar';
 import MainPanel from './components/MainPanel';
 import TopBar from './components/TopBar';
 import SearchModal from './components/SearchModal';
-import SettingsModal, { initTheme } from './components/SettingsModal';
+import SettingsModal, { initTheme, loadShortcuts, type ShortcutId } from './components/SettingsModal';
 import './styles/global.css';
 
 export interface Project {
@@ -104,21 +104,23 @@ export default function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isCtrl = e.ctrlKey || e.metaKey;
+      const shortcuts = loadShortcuts();
+      const isEnabled = (id: ShortcutId) => shortcuts.find(s => s.id === id)?.enabled ?? true;
 
       // Toggle sidebar: Ctrl/Cmd + B
-      if (isCtrl && e.key === 'b' && !e.altKey && !e.shiftKey) {
+      if (isEnabled('toggle-sidebar') && isCtrl && e.key === 'b' && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         setSidebarVisible(prev => !prev);
       }
 
       // Open settings: Ctrl/Cmd + ,
-      if (isCtrl && e.key === ',' && !e.altKey && !e.shiftKey) {
+      if (isEnabled('open-settings') && isCtrl && e.key === ',' && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         setSettingsOpen(prev => !prev);
       }
 
       // New thread: Ctrl/Cmd + N
-      if (isCtrl && e.key === 'n' && !e.altKey && !e.shiftKey) {
+      if (isEnabled('new-thread') && isCtrl && e.key === 'n' && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         if (activeProject) {
           handleAddThread(activeProject.id, 'New Thread', 'chat');
@@ -126,7 +128,7 @@ export default function App() {
       }
 
       // New project: Ctrl/Cmd + Shift + N
-      if (isCtrl && e.key === 'N' && e.shiftKey && !e.altKey) {
+      if (isEnabled('new-project') && isCtrl && e.key === 'N' && e.shiftKey && !e.altKey) {
         e.preventDefault();
         handleAddProject();
       }
