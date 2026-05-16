@@ -1,10 +1,10 @@
-import { useState, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   SlidersHorizontal, Keyboard, Cpu, GitBranch,
-  Globe, Archive
+  Globe, Archive, Trash2
 } from './icons';
-import type { Project } from '../App';
+import type { Project, Thread } from '../App';
 
 export type Section =
   | 'general'
@@ -17,8 +17,10 @@ export type Section =
 interface Props {
   section: Section;
   projects: Project[];
-  onRemoveProject: (id: number) => void;
+  archivedThreads: Thread[];
   onRestoreDefaults: () => void;
+  onUnarchiveThread: (id: number) => void;
+  onDeleteThread: (id: number) => void;
 }
 
 export interface SettingsPanelHandle {
@@ -139,10 +141,120 @@ export const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{
   { id: 'archive', label: 'Archive', icon: Archive },
 ];
 
-const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPanel({ section, projects, onRemoveProject, onRestoreDefaults }, ref) {
+/* ─── Relative time formatter ─── */
+function timeAgo(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
+
+/* ─── Archive section component ─── */
+function ArchiveSection({
+  projects,
+  archivedThreads,
+  onUnarchiveThread,
+  onDeleteThread,
+}: {
+  projects: Project[];
+  archivedThreads: Thread[];
+  onUnarchiveThread: (id: number) => void;
+  onDeleteThread: (id: number) => void;
+}) {
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; threadId: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handle = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setContextMenu(null);
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, []);
+
+  // Group archived threads by project
+  const grouped = new Map<number, Thread[]>();
+  for (const t of archivedThreads) {
+    const list = grouped.get(t.project_id) ?? [];
+    list.push(t);
+    grouped.set(t.project_id, list);
+  }
+
+  if (archivedThreads.length === 0) {
+    return <p className="settings-placeholder">No archived threads yet.</p>;
+  }
+
+  return (
+    <div className="archive-section">
+      {Array.from(grouped.entries()).map(([projectId, threads]) => {
+        const project = projects.find(p => p.id === projectId);
+        const projectName = project?.name ?? 'Unknown Project';
+        return (
+          <div key={projectId} className="archive-group">
+            <div className="archive-group-title">{projectName}</div>
+            <div className="archive-list">
+              {threads.map(thread => (
+                <div
+                  key={thread.id}
+                  className="archive-card"
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ x: e.clientX, y: e.clientY, threadId: thread.id });
+                  }}
+                >
+                  <div className="archive-card-info">
+                    <span className="archive-card-title">{thread.title}</span>
+                    <span className="archive-card-meta">
+                      Archived {timeAgo(thread.updated_at)} · Created {timeAgo(thread.created_at)}
+                    </span>
+                  </div>
+                  <button
+                    className="archive-card-btn"
+                    onClick={() => onUnarchiveThread(thread.id)}
+                  >
+                    <Archive size={14} />
+                    <span>Unarchive</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {contextMenu && (
+        <div
+          ref={menuRef}
+          className="context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button className="context-item" onClick={() => { onUnarchiveThread(contextMenu.threadId); setContextMenu(null); }}>
+            <Archive size={14} />
+            <span>Unarchive</span>
+          </button>
+          <div className="context-sep" />
+          <button className="context-item danger" onClick={() => { onDeleteThread(contextMenu.threadId); setContextMenu(null); }}>
+            <Trash2 size={14} />
+            <span>Delete</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPanel({ section, projects, archivedThreads, onRestoreDefaults, onUnarchiveThread, onDeleteThread }, ref) {
   const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(loadTheme);
   const [shortcuts, setShortcuts] = useState<ShortcutConfig[]>(loadShortcuts);
-  const [removeConfirm, setRemoveConfirm] = useState<number | null>(null);
 
   /* booleans for demo toggles */
   const [diffWrap, setDiffWrap] = useState(false);
@@ -339,31 +451,12 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPa
             )}
 
             {section === 'archive' && (
-              <>
-                <h3 style={{ fontSize: 14, marginBottom: 12 }}>Archived Projects</h3>
-                {projects.length === 0 ? (
-                  <p className="settings-placeholder">No projects added yet.</p>
-                ) : (
-                  <div className="settings-projects-list">
-                    {projects.map(p => (
-                      <div key={p.id} className="settings-project-item">
-                        <div className="settings-project-info">
-                          <span className="settings-project-name">{p.name}</span>
-                          <span className="settings-project-path">{p.path}</span>
-                        </div>
-                        {removeConfirm === p.id ? (
-                          <div className="settings-project-actions">
-                            <button className="confirm-btn secondary" onClick={() => setRemoveConfirm(null)}>Cancel</button>
-                            <button className="confirm-btn danger" onClick={() => { onRemoveProject(p.id); setRemoveConfirm(null); }}>Remove</button>
-                          </div>
-                        ) : (
-                          <button className="settings-project-remove" onClick={() => setRemoveConfirm(p.id)}>Remove</button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
+              <ArchiveSection
+                projects={projects}
+                archivedThreads={archivedThreads}
+                onUnarchiveThread={onUnarchiveThread}
+                onDeleteThread={onDeleteThread}
+              />
             )}
           </motion.div>
         </AnimatePresence>

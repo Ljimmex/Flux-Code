@@ -202,9 +202,20 @@ export class DatabaseManager {
     this.db.prepare('UPDATE threads SET status = ?, updated_at = ? WHERE id = ?').run('archived', now, id);
   }
 
+  unarchiveThread(id: number): void {
+    if (!this.db) return;
+    const now = new Date().toISOString();
+    this.db.prepare("UPDATE threads SET status = ?, updated_at = ? WHERE id = ?").run('idle', now, id);
+  }
+
   deleteThread(id: number): void {
     if (!this.db) return;
     this.db.prepare('DELETE FROM threads WHERE id = ?').run(id);
+  }
+
+  getArchivedThreads(): any[] {
+    if (!this.db) return [];
+    return this.db.prepare("SELECT * FROM threads WHERE status = 'archived' ORDER BY updated_at DESC").all();
   }
 
   renameProject(id: number, name: string): void {

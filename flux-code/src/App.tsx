@@ -41,6 +41,7 @@ export default function App() {
   const [view, setView] = useState<'chat' | 'settings'>('chat');
   const [settingsSection, setSettingsSection] = useState<Section>('general');
   const settingsPanelRef = useRef<SettingsPanelHandle>(null);
+  const [archivedThreads, setArchivedThreads] = useState<Thread[]>([]);
   const [sidebarVisible, setSidebarVisible] = useState(true);
 
   const loadProjects = useCallback(async () => {
@@ -56,10 +57,16 @@ export default function App() {
     });
   }, []);
 
+  const loadArchivedThreads = useCallback(async () => {
+    const list = await window.electronAPI.db.getArchivedThreads();
+    setArchivedThreads(list);
+  }, []);
+
   useEffect(() => {
     initTheme();
     loadProjects();
-  }, [loadProjects]);
+    loadArchivedThreads();
+  }, [loadProjects, loadArchivedThreads]);
 
   useEffect(() => {
     if (activeProject) {
@@ -181,8 +188,16 @@ export default function App() {
                 ref={settingsPanelRef}
                 section={settingsSection}
                 projects={projects}
-                onRemoveProject={handleRemoveProject}
+                archivedThreads={archivedThreads}
                 onRestoreDefaults={() => {}}
+                onUnarchiveThread={async (id) => {
+                  await window.electronAPI.db.unarchiveThread(id);
+                  await loadArchivedThreads();
+                }}
+                onDeleteThread={async (id) => {
+                  await window.electronAPI.db.deleteThread(id);
+                  await loadArchivedThreads();
+                }}
               />
             ) : (
               <MainPanel
