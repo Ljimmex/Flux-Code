@@ -29,3 +29,12 @@ export const PROVIDER_DISPLAY_NAMES: Record<ProviderKind, string> = {
   kimi: 'Kimi (Moonshot AI)',
   gemini: 'Gemini (Google)',
 };
+
+export const PROVIDER_AUTH_INSTRUCTIONS: Record<ProviderKind, string[]> = {
+  codex: ['npm install -g @openai/codex', 'codex login'],
+  claude: ['npm install -g @anthropic-ai/claude-code', 'claude auth login'],
+  opencode: ['npm install -g opencode-ai', 'opencode config set provider moonshot'],
+  ollama: ['# Install Ollama from ollama.com', 'ollama pull llama3.3'],
+  kimi: ['npm install -g kimi-cli', 'kimi-cli auth login'],
+  gemini: ['npm install -g @google/gemini-cli', 'gemini auth login'],
+};

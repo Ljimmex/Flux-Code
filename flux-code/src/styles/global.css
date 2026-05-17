@@ -2966,6 +2966,103 @@ textarea {
   color: #f85149;
 }
 
+/* Provider status badges */
+.provider-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.provider-status-badge.ready {
+  background: rgba(35, 197, 94, 0.12);
+  color: #23c55e;
+}
+
+.provider-status-badge.not-installed {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.provider-status-badge.not-auth {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.provider-status-badge.error {
+  background: rgba(248, 81, 73, 0.12);
+  color: #f85149;
+}
+
+.provider-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #23c55e;
+}
+
+/* Provider instructions */
+.provider-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.provider-instruction-cmd {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+/* Provider API key row */
+.provider-apikey-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.provider-apikey-row .settings-input {
+  flex: 1;
+}
+
+/* Provider model chips */
+.provider-model-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.provider-model-chip {
+  padding: 4px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--text-secondary);
+}
+
+/* Provider error box */
+.provider-error-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(248, 81, 73, 0.08);
+  border: 1px solid rgba(248, 81, 73, 0.2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: #f85149;
+}
+
 /* ===== SELECTION ===== */
 ::selection {
   background: var(--accent-dim);
