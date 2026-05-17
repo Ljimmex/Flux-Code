@@ -11,9 +11,13 @@ interface Props {
 
 const MODELS = [
   { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI' },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI' },
   { id: 'claude-4', name: 'Claude 4', provider: 'Anthropic' },
   { id: 'deepseek', name: 'DeepSeek V4', provider: 'DeepSeek' },
-  { id: 'ollama', name: 'Ollama Local', provider: 'Local' },
+  { id: 'ollama:llama3.2', name: 'Llama 3.2', provider: 'Ollama' },
+  { id: 'ollama:codellama', name: 'Code Llama', provider: 'Ollama' },
+  { id: 'ollama:phi3', name: 'Phi-3', provider: 'Ollama' },
+  { id: 'ollama:mistral', name: 'Mistral', provider: 'Ollama' },
 ];
 
 const ACCESS_LEVELS = [

@@ -1,4 +1,4 @@
-import { ipcMain, type WebContents } from 'electron';
+import { ipcMain } from 'electron';
 import OpenAI from 'openai';
 import type { DatabaseManager } from './db';
 
@@ -10,6 +10,150 @@ interface ChatMessage {
 let dbManager: DatabaseManager;
 let activeStreams = new Map<number, AbortController>();
 
+const OLLAMA_BASE_URL = 'http://localhost:11434';
+
+function isOllamaModel(model: string): boolean {
+  return model.startsWith('ollama:');
+}
+
+function getOllamaModelName(model: string): string {
+  return model.replace('ollama:', '');
+}
+
+async function streamOpenAI(
+  event: Electron.IpcMainInvokeEvent,
+  threadId: number,
+  messages: ChatMessage[],
+  model: string,
+  abortController: AbortController
+) {
+  const apiKey = dbManager.getSettings()['openai_api_key'];
+  if (!apiKey) {
+    event.sender.send('chat:error', { threadId, error: 'OpenAI API key not configured. Add it in Settings > Providers.' });
+    dbManager.updateThreadStatus(threadId, 'idle');
+    return;
+  }
+
+  const openai = new OpenAI({ apiKey });
+
+  const stream = await openai.chat.completions.create(
+    {
+      model: model || 'gpt-4o-mini',
+      messages,
+      stream: true,
+    },
+    { signal: abortController.signal }
+  );
+
+  let fullContent = '';
+
+  for await (const chunk of stream) {
+    const token = chunk.choices[0]?.delta?.content || '';
+    if (token) {
+      fullContent += token;
+      event.sender.send('chat:token', { threadId, token });
+    }
+
+    if (abortController.signal.aborted) {
+      break;
+    }
+  }
+
+  if (fullContent) {
+    dbManager.addMessage(threadId, 'assistant', fullContent);
+  }
+
+  dbManager.updateThreadStatus(threadId, 'idle');
+  event.sender.send('chat:done', { threadId });
+}
+
+async function streamOllama(
+  event: Electron.IpcMainInvokeEvent,
+  threadId: number,
+  messages: ChatMessage[],
+  model: string,
+  abortController: AbortController
+) {
+  const ollamaModel = getOllamaModelName(model);
+
+  try {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: ollamaModel,
+        messages,
+        stream: true,
+      }),
+      signal: abortController.signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Ollama error (${response.status}): ${text}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Ollama returned empty response body');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullContent = '';
+    let buffer = '';
+
+    while (true) {
+      if (abortController.signal.aborted) {
+        reader.cancel();
+        break;
+      }
+
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const data = JSON.parse(line);
+          const token = data.message?.content || '';
+          if (token) {
+            fullContent += token;
+            event.sender.send('chat:token', { threadId, token });
+          }
+          if (data.done) {
+            reader.cancel();
+            break;
+          }
+        } catch {
+          // Ignore malformed lines
+        }
+      }
+    }
+
+    if (fullContent) {
+      dbManager.addMessage(threadId, 'assistant', fullContent);
+    }
+
+    dbManager.updateThreadStatus(threadId, 'idle');
+    event.sender.send('chat:done', { threadId });
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      dbManager.updateThreadStatus(threadId, 'idle');
+      event.sender.send('chat:done', { threadId });
+      return;
+    }
+    const msg = err.message || 'Unknown Ollama error';
+    if (msg.includes('fetch failed') || msg.includes('ECONNREFUSED')) {
+      throw new Error('Ollama is not running. Start it with: ollama run ' + ollamaModel);
+    }
+    throw err;
+  }
+}
+
 export function initChat(db: DatabaseManager): void {
   dbManager = db;
 
@@ -18,64 +162,26 @@ export function initChat(db: DatabaseManager): void {
   });
 
   ipcMain.handle('chat:sendMessage', async (event, threadId: number, userMessage: string, model: string) => {
-    // Save user message
     dbManager.addMessage(threadId, 'user', userMessage);
 
-    // Get conversation history
     const history = dbManager.getMessages(threadId) as Array<{ role: string; content: string }>;
     const messages: ChatMessage[] = history.map(m => ({
       role: m.role as 'system' | 'user' | 'assistant',
       content: m.content,
     }));
 
-    // Update thread status
     dbManager.updateThreadStatus(threadId, 'generating');
     dbManager.updateThreadModel(threadId, model);
 
-    // Start streaming
     const abortController = new AbortController();
     activeStreams.set(threadId, abortController);
 
-    const apiKey = dbManager.getSettings()['openai_api_key'];
-    if (!apiKey) {
-      event.sender.send('chat:error', { threadId, error: 'OpenAI API key not configured. Add it in Settings > Providers.' });
-      dbManager.updateThreadStatus(threadId, 'idle');
-      return;
-    }
-
-    const openai = new OpenAI({ apiKey });
-
     try {
-      const stream = await openai.chat.completions.create(
-        {
-          model: model || 'gpt-4o-mini',
-          messages,
-          stream: true,
-        },
-        { signal: abortController.signal }
-      );
-
-      let fullContent = '';
-
-      for await (const chunk of stream) {
-        const token = chunk.choices[0]?.delta?.content || '';
-        if (token) {
-          fullContent += token;
-          event.sender.send('chat:token', { threadId, token });
-        }
-
-        if (abortController.signal.aborted) {
-          break;
-        }
+      if (isOllamaModel(model)) {
+        await streamOllama(event, threadId, messages, model, abortController);
+      } else {
+        await streamOpenAI(event, threadId, messages, model, abortController);
       }
-
-      // Save assistant response
-      if (fullContent) {
-        dbManager.addMessage(threadId, 'assistant', fullContent);
-      }
-
-      dbManager.updateThreadStatus(threadId, 'idle');
-      event.sender.send('chat:done', { threadId });
     } catch (err: any) {
       const errorMessage = err.message || 'Unknown error';
       dbManager.updateThreadStatus(threadId, 'error');
