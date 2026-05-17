@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowUp, Square, User, Bot, Lock, Check, Search, Copy } from './icons';
+import { ArrowUp, Square, Bot, Lock, Check, Search, Copy } from './icons';
 import logo from '../Fluxavatar.png';
 import type { Thread, Project } from '../App';
 
@@ -234,14 +234,10 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
             : '';
           return (
             <div key={i} className={`message message-${msg.role}`}>
-              <div className="message-avatar">
-                {msg.role === 'user' ? <User size={18} /> : <img src={logo} alt="AI" className="msg-avatar-img" />}
-              </div>
-              <div className="message-body">
-                <div className="message-content">{msg.content}</div>
+              <div className="message-content">
+                <span className="message-text">{msg.content}</span>
                 {msg.role === 'user' && (
-                  <div className="message-meta">
-                    <span className="message-time">{time}</span>
+                  <div className="message-content-meta">
                     <button
                       className="message-copy-btn"
                       onClick={() => navigator.clipboard.writeText(msg.content)}
@@ -249,6 +245,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
                     >
                       <Copy size={12} />
                     </button>
+                    <span className="message-time">{time}</span>
                   </div>
                 )}
               </div>
@@ -257,10 +254,9 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
         })}
         {isGenerating && streamingContent && (
           <div className="message message-assistant">
-            <div className="message-avatar">
-              <img src={logo} alt="AI" className="msg-avatar-img" />
+            <div className="message-content">
+              <span className="message-text">{streamingContent}</span>
             </div>
-            <div className="message-content">{streamingContent}</div>
           </div>
         )}
       </div>
