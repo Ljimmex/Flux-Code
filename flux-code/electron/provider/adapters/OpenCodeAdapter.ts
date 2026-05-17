@@ -24,13 +24,13 @@ export class OpenCodeAdapter implements ProviderAdapter {
 
   async probe(): Promise<ProviderStatus> {
     try {
-      execSync('opencode --version', { timeout: 5000, stdio: 'ignore' });
+      execSync('opencode --version', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
     } catch {
       return { kind: 'not-installed' };
     }
 
     try {
-      execSync('opencode config get provider', { timeout: 5000, stdio: 'ignore' });
+      execSync('opencode config get provider', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
       return { kind: 'ready', models: ['kimi-k2.6', 'claude-opus-4', 'gpt-4o'] };
     } catch {
       return { kind: 'not-authenticated', installCmd: 'opencode config set provider moonshot' };

@@ -24,13 +24,13 @@ export class GeminiAdapter implements ProviderAdapter {
 
   async probe(): Promise<ProviderStatus> {
     try {
-      execSync('gemini --version', { timeout: 5000, stdio: 'ignore' });
+      execSync('gemini --version', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
     } catch {
       return { kind: 'not-installed' };
     }
 
     try {
-      execSync('gemini auth status', { timeout: 5000, stdio: 'ignore' });
+      execSync('gemini auth status', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
       return { kind: 'ready', models: ['gemini-2.5-pro', 'gemini-2.5-flash'] };
     } catch {
       return { kind: 'not-authenticated', installCmd: 'gemini auth login' };

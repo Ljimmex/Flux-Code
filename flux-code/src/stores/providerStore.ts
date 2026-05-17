@@ -7,11 +7,34 @@ export type ProviderStatus =
   | { kind: 'ready'; models: string[] }
   | { kind: 'error'; message: string };
 
+const ENABLED_KEY = 'flux:providers:enabled';
+
+function loadEnabled(): Record<ProviderKind, boolean> {
+  try {
+    const raw = localStorage.getItem(ENABLED_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {
+    codex: true,
+    claude: true,
+    opencode: true,
+    ollama: true,
+    kimi: true,
+    gemini: true,
+  };
+}
+
+function saveEnabled(enabled: Record<ProviderKind, boolean>) {
+  localStorage.setItem(ENABLED_KEY, JSON.stringify(enabled));
+}
+
 interface ProviderState {
   // Status of each provider from HealthService
   statuses: Record<string, ProviderStatus>;
   // Model cache from HealthService
   models: Record<string, string[]>;
+  // Enabled/disabled per provider
+  enabledProviders: Record<ProviderKind, boolean>;
   // Active provider and model for new conversations
   activeProvider: ProviderKind;
   activeModel: string;
@@ -25,6 +48,7 @@ interface ProviderState {
   // Actions
   setStatus: (kind: ProviderKind, status: ProviderStatus) => void;
   setModels: (kind: ProviderKind, models: string[]) => void;
+  toggleProvider: (kind: ProviderKind) => void;
   setActiveProvider: (kind: ProviderKind) => void;
   setActiveModel: (model: string) => void;
   appendStreamChunk: (turnId: string, text: string) => void;
@@ -35,6 +59,7 @@ interface ProviderState {
 export const useProviderStore = create<ProviderState>((set) => ({
   statuses: {},
   models: {},
+  enabledProviders: loadEnabled(),
   activeProvider: 'ollama',
   activeModel: DEFAULT_MODEL['ollama'],
   streamingTurnId: null,
@@ -47,6 +72,13 @@ export const useProviderStore = create<ProviderState>((set) => ({
 
   setModels: (kind, models) =>
     set((s) => ({ models: { ...s.models, [kind]: models } })),
+
+  toggleProvider: (kind) =>
+    set((s) => {
+      const next = { ...s.enabledProviders, [kind]: !s.enabledProviders[kind] };
+      saveEnabled(next);
+      return { enabledProviders: next };
+    }),
 
   setActiveProvider: (kind) =>
     set((s) => {

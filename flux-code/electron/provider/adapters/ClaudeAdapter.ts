@@ -24,13 +24,13 @@ export class ClaudeAdapter implements ProviderAdapter {
 
   async probe(): Promise<ProviderStatus> {
     try {
-      execSync('claude --version', { timeout: 5000, stdio: 'ignore' });
+      execSync('claude --version', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
     } catch {
       return { kind: 'not-installed' };
     }
 
     try {
-      execSync('claude auth status', { timeout: 5000, stdio: 'ignore' });
+      execSync('claude auth status', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
       return { kind: 'ready', models: ['claude-opus-4', 'claude-sonnet-4', 'claude-haiku-4'] };
     } catch {
       return { kind: 'not-authenticated', installCmd: 'claude auth login' };

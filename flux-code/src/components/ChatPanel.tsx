@@ -34,7 +34,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
   const [selectedAgent, setSelectedAgent] = useState('Build');
 
   const {
-    statuses, models: providerModels,
+    statuses, models: providerModels, enabledProviders,
     activeProvider, activeModel,
     setActiveProvider, setActiveModel,
     streamingContent: storeStreamingContent,
@@ -46,9 +46,10 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
   const toolbarRef = useRef<HTMLDivElement>(null);
   const generatingRef = useRef(false);
 
-  // Build flat model list from provider store
+  // Build flat model list from provider store (only enabled providers)
   const allModels: { provider: ProviderKind; model: string; displayName: string }[] = [];
   for (const [kind, list] of Object.entries(providerModels)) {
+    if (!enabledProviders[kind as ProviderKind]) continue;
     for (const m of list) {
       allModels.push({ provider: kind as ProviderKind, model: m, displayName: m });
     }
@@ -260,6 +261,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
                     </div>
                     {/* Provider list */}
                     {(['codex', 'claude', 'opencode', 'ollama', 'kimi', 'gemini'] as ProviderKind[]).map(kind => {
+                      if (!enabledProviders[kind]) return null;
                       const status = statuses[kind];
                       const isReady = status?.kind === 'ready';
                       const modelList = providerModels[kind] ?? [];

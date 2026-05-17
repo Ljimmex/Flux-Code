@@ -26,13 +26,13 @@ export class CodexAdapter implements ProviderAdapter {
 
   async probe(): Promise<ProviderStatus> {
     try {
-      execSync('codex --version', { timeout: 5000, stdio: 'ignore' });
+      execSync('codex --version', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
     } catch {
       return { kind: 'not-installed' };
     }
 
     try {
-      execSync('codex auth status', { timeout: 5000, stdio: 'ignore' });
+      execSync('codex auth status', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
       return { kind: 'ready', models: ['codex-1', 'o3', 'o4-mini'] };
     } catch {
       return { kind: 'not-authenticated', installCmd: 'codex login' };

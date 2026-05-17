@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useProviderStore } from '../stores/providerStore';
 import { PROVIDER_DISPLAY_NAMES, PROVIDER_AUTH_INSTRUCTIONS, type ProviderKind } from '../types/provider';
 import {
-  RefreshCw, AlertCircle, XCircle,
+  RefreshCw, ChevronDown, AlertCircle,
   CodexIcon, OllamaIcon, OpenCodeIcon, ClaudeIcon, KimiIcon, GeminiIcon,
 } from './icons';
 
@@ -17,55 +17,29 @@ const PROVIDER_ICONS: Record<ProviderKind, React.ComponentType<{ size?: number; 
   gemini: GeminiIcon,
 };
 
-const PROVIDER_COLORS: Record<ProviderKind, string> = {
-  codex: '#10A37F',
-  claude: '#D97757',
-  opencode: '#A855F7',
-  ollama: '#3B82F6',
-  kimi: '#027aff',
-  gemini: '#F6C013',
+const STATUS_COLORS: Record<StatusKind, string> = {
+  ready: '#23c55e',
+  'not-installed': '#6b7280',
+  'not-authenticated': '#f59e0b',
+  error: '#f85149',
 };
 
 const ALL_PROVIDERS: ProviderKind[] = ['codex', 'claude', 'opencode', 'ollama', 'kimi', 'gemini'];
 
-function StatusBadge({ status }: { status: any }) {
-  if (!status) return null;
-  const kind = status.kind as StatusKind;
-
-  if (kind === 'ready') {
-    return (
-      <span className="provider-status-badge ready">
-        <span className="provider-status-dot" />
-        Ready
-      </span>
-    );
-  }
-  if (kind === 'not-installed') {
-    return (
-      <span className="provider-status-badge not-installed">
-        <XCircle size={12} />
-        Not installed
-      </span>
-    );
-  }
-  if (kind === 'not-authenticated') {
-    return (
-      <span className="provider-status-badge not-auth">
-        <AlertCircle size={12} />
-        Login required
-      </span>
-    );
-  }
+function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
-    <span className="provider-status-badge error">
-      <AlertCircle size={12} />
-      Error
-    </span>
+    <button
+      className={`settings-toggle ${checked ? 'on' : ''}`}
+      onClick={onChange}
+      aria-pressed={checked}
+    >
+      <span className="settings-toggle-thumb" />
+    </button>
   );
 }
 
 function ProviderCard({
-  kind, status, models, expanded, onToggle, onProbe,
+  kind, status, models, expanded, onToggle, onProbe, enabled, onToggleEnabled,
 }: {
   kind: ProviderKind;
   status: any;
@@ -73,30 +47,47 @@ function ProviderCard({
   expanded: boolean;
   onToggle: () => void;
   onProbe: () => void;
+  enabled: boolean;
+  onToggleEnabled: () => void;
 }) {
   const Icon = PROVIDER_ICONS[kind];
-  const color = PROVIDER_COLORS[kind];
-  const isReady = status?.kind === 'ready';
-  const isNotAuth = status?.kind === 'not-authenticated';
-  const isNotInstalled = status?.kind === 'not-installed';
   const displayName = PROVIDER_DISPLAY_NAMES[kind];
   const instructions = PROVIDER_AUTH_INSTRUCTIONS[kind];
+  const statusKind = (status?.kind as StatusKind) ?? 'not-installed';
+  const statusColor = STATUS_COLORS[statusKind];
+  const isReady = statusKind === 'ready';
+  const isNotAuth = statusKind === 'not-authenticated';
+  const isNotInstalled = statusKind === 'not-installed';
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
 
   const handleSaveApiKey = async () => {
     if (!apiKey.trim()) return;
-    // API key saving not yet implemented in IPC
     setApiKey('');
     onProbe();
   };
 
   return (
     <div className={`provider-card ${expanded ? 'expanded' : ''}`}>
-      <div className="provider-header" onClick={onToggle}>
+      <div className="provider-header">
+        {/* Expand/collapse arrow */}
+        <button
+          className="provider-chevron"
+          onClick={onToggle}
+          title={expanded ? 'Collapse' : 'Expand'}
+        >
+          <ChevronDown size={16} className={expanded ? 'rotated' : ''} />
+        </button>
+
         <div className="provider-info">
-          <div className="provider-icon" style={{ color }}>
+          <div className="provider-icon-wrap">
             <Icon size={20} />
+            {/* Status dot on icon */}
+            <span
+              className="provider-status-dot-icon"
+              style={{ backgroundColor: statusColor }}
+              title={statusKind.replace('-', ' ')}
+            />
           </div>
           <div className="provider-name-group">
             <span className="provider-name">{displayName}</span>
@@ -105,8 +96,10 @@ function ProviderCard({
             </span>
           </div>
         </div>
+
+        {/* Enable/disable toggle */}
         <div className="provider-actions">
-          <StatusBadge status={status} />
+          <Toggle checked={enabled} onChange={onToggleEnabled} />
         </div>
       </div>
 
@@ -188,7 +181,7 @@ function ProviderCard({
 }
 
 export default function ProvidersSection() {
-  const { statuses, models } = useProviderStore();
+  const { statuses, models, enabledProviders, toggleProvider } = useProviderStore();
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState(() => new Date());
 
@@ -226,6 +219,8 @@ export default function ProvidersSection() {
             expanded={expandedProvider === kind}
             onToggle={() => setExpandedProvider(expandedProvider === kind ? null : kind)}
             onProbe={() => handleProbe(kind)}
+            enabled={enabledProviders[kind] ?? true}
+            onToggleEnabled={() => toggleProvider(kind)}
           />
         ))}
       </div>

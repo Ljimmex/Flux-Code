@@ -37,9 +37,6 @@ export async function initProviders(win: BrowserWindow): Promise<void> {
   // Forward provider runtime events to renderer
   providerService.onEvent(broadcast);
 
-  // Start health probes
-  await healthService.start();
-
   // ─── IPC handlers ────────────────────────────────────────────────────────
 
   ipcMain.handle('provider:getStatuses', () => healthService.getAllStatuses());
@@ -73,6 +70,9 @@ export async function initProviders(win: BrowserWindow): Promise<void> {
   ipcMain.handle('provider:stopSession', async (_, threadId: number) => {
     await providerService.stopSession(threadId);
   });
+
+  // Start health probes (after IPC handlers are registered)
+  await healthService.start();
 }
 
 export async function cleanupProviders(): Promise<void> {

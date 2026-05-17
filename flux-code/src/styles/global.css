@@ -2749,6 +2749,44 @@ textarea {
   color: var(--text-primary);
 }
 
+.provider-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.provider-status-dot-icon {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-secondary);
+}
+
+.provider-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--text-muted);
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.provider-chevron:hover {
+  color: var(--text-primary);
+}
+
+.provider-chevron .rotated {
+  transform: rotate(180deg);
+}
+
 .provider-name-group {
   display: flex;
   flex-direction: column;

@@ -170,16 +170,27 @@ export class KimiAdapter implements ProviderAdapter {
   }
 
   private readApiKey(): string | null {
-    try {
-      const fs = require('fs');
-      const os = require('os');
-      const path = require('path');
-      const authFile = path.join(os.homedir(), '.config', 'kimi', 'auth.json');
-      if (fs.existsSync(authFile)) {
-        const data = JSON.parse(fs.readFileSync(authFile, 'utf8'));
-        return data.apiKey ?? null;
-      }
-    } catch { /* ignore */ }
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+
+    const candidates = [
+      path.join(os.homedir(), '.config', 'kimi', 'auth.json'),
+      path.join(os.homedir(), '.kimi', 'auth.json'),
+      process.env.APPDATA ? path.join(process.env.APPDATA, 'kimi', 'auth.json') : '',
+      process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'kimi', 'auth.json') : '',
+    ];
+
+    for (const authFile of candidates) {
+      if (!authFile) continue;
+      try {
+        if (fs.existsSync(authFile)) {
+          const data = JSON.parse(fs.readFileSync(authFile, 'utf8'));
+          if (data.apiKey) return data.apiKey;
+        }
+      } catch { /* ignore */ }
+    }
+
     return process.env.MOONSHOT_API_KEY ?? null;
   }
 
