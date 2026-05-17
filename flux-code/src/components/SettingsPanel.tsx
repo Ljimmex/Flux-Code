@@ -877,9 +877,11 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPa
                     <span className="settings-group-meta">
                       Refreshed {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
-                    <button className="settings-btn" onClick={refreshProviders}>
+                    <button className="settings-icon-btn" title="Add provider">
+                      <Plus size={14} />
+                    </button>
+                    <button className="settings-icon-btn" onClick={refreshProviders} title="Refresh providers">
                       <RefreshCw size={14} />
-                      <span>Refresh</span>
                     </button>
                   </div>
                 </div>
