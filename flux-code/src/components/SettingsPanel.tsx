@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 're
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   SlidersHorizontal, Keyboard, Cpu, GitBranch,
-  Globe, Archive, Trash2
+  Globe, Archive, Trash2, Plus, OpenAIIcon, OllamaIcon
 } from './icons';
 import type { Project, Thread } from '../App';
 
@@ -140,6 +140,125 @@ export const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{
   { id: 'connections', label: 'Connections', icon: Globe },
   { id: 'archive', label: 'Archive', icon: Archive },
 ];
+
+/* ─── Provider card component ─── */
+function ProviderCard({
+  provider,
+  expanded,
+  onToggleExpand,
+  onUpdate,
+  onAddModel,
+  onRemoveModel,
+}: {
+  provider: ProviderConfig;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onUpdate: (patch: Partial<ProviderConfig>) => void;
+  onAddModel: (model: string) => void;
+  onRemoveModel: (model: string) => void;
+}) {
+  const [newModel, setNewModel] = useState('');
+  const Icon = provider.icon === 'openai' ? OpenAIIcon : OllamaIcon;
+
+  return (
+    <div className={`provider-card ${expanded ? 'expanded' : ''}`}>
+      <div className="provider-header" onClick={onToggleExpand}>
+        <div className="provider-info">
+          <div className="provider-icon">
+            <Icon size={20} />
+          </div>
+          <div className="provider-name-group">
+            <span className="provider-name">{provider.name}</span>
+            <span className="provider-status">
+              {provider.enabled
+                ? `${provider.models.length} models available`
+                : 'Disabled'}
+            </span>
+          </div>
+        </div>
+        <div className="provider-actions">
+          <Toggle checked={provider.enabled} onChange={() => onUpdate({ enabled: !provider.enabled })} />
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="provider-details">
+          {provider.id === 'openai' && (
+            <div className="provider-field">
+              <label className="provider-label">API Key</label>
+              <input
+                className="settings-input"
+                type="password"
+                placeholder="sk-..."
+                value={provider.apiKey || ''}
+                onChange={(e) => onUpdate({ apiKey: e.target.value })}
+              />
+              <span className="provider-hint">Stored locally in SQLite settings.</span>
+            </div>
+          )}
+
+          {provider.id === 'ollama' && (
+            <div className="provider-field">
+              <label className="provider-label">Base URL</label>
+              <input
+                className="settings-input"
+                type="text"
+                placeholder="http://localhost:11434"
+                value={provider.baseUrl || ''}
+                onChange={(e) => onUpdate({ baseUrl: e.target.value })}
+              />
+              <span className="provider-hint">Leave default if Ollama runs locally.</span>
+            </div>
+          )}
+
+          <div className="provider-field">
+            <label className="provider-label">Models</label>
+            <div className="provider-models">
+              {provider.models.map(model => (
+                <div key={model} className="provider-model-item">
+                  <span>{model}</span>
+                  <button
+                    className="provider-model-remove"
+                    onClick={() => onRemoveModel(model)}
+                    title="Remove model"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+              <div className="provider-model-add">
+                <input
+                  className="settings-input"
+                  placeholder="model-name"
+                  value={newModel}
+                  onChange={(e) => setNewModel(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newModel.trim()) {
+                      onAddModel(newModel.trim());
+                      setNewModel('');
+                    }
+                  }}
+                />
+                <button
+                  className="settings-btn"
+                  onClick={() => {
+                    if (newModel.trim()) {
+                      onAddModel(newModel.trim());
+                      setNewModel('');
+                    }
+                  }}
+                >
+                  <Plus size={12} />
+                  <span>Add</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ─── Relative time formatter ─── */
 function timeAgo(dateStr: string): string {
@@ -318,6 +437,50 @@ function ArchiveSection({
   );
 }
 
+/* ─── Provider config types & helpers ─── */
+interface ProviderConfig {
+  id: string;
+  name: string;
+  icon: 'openai' | 'ollama';
+  enabled: boolean;
+  apiKey?: string;
+  baseUrl?: string;
+  models: string[];
+}
+
+const PROVIDERS_KEY = 'flux:providers';
+
+const DEFAULT_PROVIDERS: ProviderConfig[] = [
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    icon: 'openai',
+    enabled: true,
+    apiKey: '',
+    models: ['gpt-4', 'gpt-4o-mini'],
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama',
+    icon: 'ollama',
+    enabled: true,
+    baseUrl: 'http://localhost:11434',
+    models: ['llama3.2', 'codellama', 'phi3', 'mistral'],
+  },
+];
+
+function loadProviders(): ProviderConfig[] {
+  try {
+    const raw = localStorage.getItem(PROVIDERS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return DEFAULT_PROVIDERS;
+}
+
+function saveProviders(list: ProviderConfig[]) {
+  localStorage.setItem(PROVIDERS_KEY, JSON.stringify(list));
+}
+
 const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPanel({ section, projects, archivedThreads, onRestoreDefaults, onUnarchiveThread, onDeleteThread }, ref) {
   const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(loadTheme);
   const [shortcuts, setShortcuts] = useState<ShortcutConfig[]>(loadShortcuts);
@@ -331,6 +494,34 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPa
   const [deleteConfirm, setDeleteConfirm] = useState(true);
   const [timeFormat, setTimeFormat] = useState('system');
   const [newThreadsMode, setNewThreadsMode] = useState('local');
+
+  /* Providers state */
+  const [providers, setProviders] = useState(() => loadProviders());
+  const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
+
+  const updateProvider = (id: string, patch: Partial<ProviderConfig>) => {
+    setProviders(prev => {
+      const next = prev.map(p => p.id === id ? { ...p, ...patch } : p);
+      saveProviders(next);
+      return next;
+    });
+  };
+
+  const addProviderModel = (providerId: string, model: string) => {
+    setProviders(prev => {
+      const next = prev.map(p => p.id === providerId ? { ...p, models: [...p.models, model] } : p);
+      saveProviders(next);
+      return next;
+    });
+  };
+
+  const removeProviderModel = (providerId: string, model: string) => {
+    setProviders(prev => {
+      const next = prev.map(p => p.id === providerId ? { ...p, models: p.models.filter(m => m !== model) } : p);
+      saveProviders(next);
+      return next;
+    });
+  };
 
   const handleTheme = (t: 'dark' | 'light' | 'system') => {
     setTheme(t);
@@ -498,9 +689,18 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPa
             )}
 
             {section === 'providers' && (
-              <div className="settings-placeholder">
-                <p>Configure AI providers and API keys.</p>
-                <p className="muted">OpenAI, Anthropic, and Ollama integration coming soon.</p>
+              <div className="providers-section">
+                {providers.map(provider => (
+                  <ProviderCard
+                    key={provider.id}
+                    provider={provider}
+                    expanded={expandedProvider === provider.id}
+                    onToggleExpand={() => setExpandedProvider(expandedProvider === provider.id ? null : provider.id)}
+                    onUpdate={(patch) => updateProvider(provider.id, patch)}
+                    onAddModel={(model) => addProviderModel(provider.id, model)}
+                    onRemoveModel={(model) => removeProviderModel(provider.id, model)}
+                  />
+                ))}
               </div>
             )}
 
