@@ -1013,13 +1013,13 @@
     <h3>Faza 2: Chat AI ze Streaming</h3>
     <p><strong>Sprint 4-5 | Tydzień 7-10 | Cel:</strong> Pełny chat z markdown, code blocks, streaming, multi-provider</p>
 
-    <div class="sprint-header">Sprint 4: Chat Backend (Rust)</div>
+    <div class="sprint-header">Sprint 4: Chat Backend (TypeScript w Electron main)</div>
     <p><em>Tydzień 7-8 | Solo dev</em></p>
 
-    <div class="task-item"><strong>TASK 4.1:</strong> LLM Client w Rust</div>
+    <div class="task-item"><strong>TASK 4.1:</strong> LLM Client <span style="color:var(--success)">✅</span> (OpenAI SDK w Electron main — TypeScript zamiast Rust)</div>
     <p>Moduł <code>llm.rs</code>: struktura <code>LlmClient</code> z konfiguracją (provider, api_key, model, base_url). Funkcja <code>stream_chat(messages, config)</code> wysyła POST do API (OpenAI/Anthropic/Ollama) z <code>stream: true</code> i zwraca <code>impl Stream</code> (SSE). Użycie reqwest + eventsource-stream + futures. Parsowanie SSE: każdy event zawiera <code>choices[0].delta.content</code> (OpenAI) lub <code>delta.text</code> (Anthropic). Error handling: retry 3x, timeout 30s, graceful degradation.</p>
 
-    <div class="task-item"><strong>TASK 4.2:</strong> Tauri Command dla Chatu</div>
+    <div class="task-item"><strong>TASK 4.2:</strong> IPC Streaming dla Chatu <span style="color:var(--success)">✅</span> (Electron IPC zamiast Tauri)</div>
     <p><code>#[tauri::command] async fn llm_chat(window: Window, payload: ChatPayload) -> Result&lt;(), String&gt;</code>:</p>
     <ol>
       <li>pobiera historię messages z SQLite,</li>
