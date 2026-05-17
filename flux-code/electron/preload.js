@@ -29,6 +29,26 @@ const api = {
         close: () => ipcRenderer.invoke('window:close'),
         isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
     },
+    chat: {
+        getMessages: (threadId) => ipcRenderer.invoke('chat:getMessages', threadId),
+        sendMessage: (threadId, message, model) => ipcRenderer.invoke('chat:sendMessage', threadId, message, model),
+        cancel: (threadId) => ipcRenderer.invoke('chat:cancel', threadId),
+    },
+    onChatToken: (callback) => {
+        const handler = (_, data) => callback(data);
+        ipcRenderer.on('chat:token', handler);
+        return () => ipcRenderer.removeListener('chat:token', handler);
+    },
+    onChatDone: (callback) => {
+        const handler = (_, data) => callback(data);
+        ipcRenderer.on('chat:done', handler);
+        return () => ipcRenderer.removeListener('chat:done', handler);
+    },
+    onChatError: (callback) => {
+        const handler = (_, data) => callback(data);
+        ipcRenderer.on('chat:error', handler);
+        return () => ipcRenderer.removeListener('chat:error', handler);
+    },
     onNavigate: (callback) => {
         const handler = (_, path) => callback(path);
         ipcRenderer.on('navigate-to', handler);

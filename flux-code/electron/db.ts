@@ -218,6 +218,29 @@ export class DatabaseManager {
     return this.db.prepare("SELECT * FROM threads WHERE status = 'archived' ORDER BY updated_at DESC").all();
   }
 
+  getMessages(threadId: number): any[] {
+    if (!this.db) return [];
+    return this.db.prepare('SELECT * FROM messages WHERE thread_id = ? ORDER BY created_at ASC').all(threadId);
+  }
+
+  addMessage(threadId: number, role: string, content: string, metadata?: string): any {
+    if (!this.db) return null;
+    const stmt = this.db.prepare('INSERT INTO messages (thread_id, role, content, metadata) VALUES (?, ?, ?, ?)');
+    const result = stmt.run(threadId, role, content, metadata ?? null);
+    return this.db.prepare('SELECT * FROM messages WHERE id = ?').get(result.lastInsertRowid);
+  }
+
+  updateThreadModel(id: number, model: string): void {
+    if (!this.db) return;
+    this.db.prepare('UPDATE threads SET model = ? WHERE id = ?').run(model, id);
+  }
+
+  updateThreadStatus(id: number, status: string): void {
+    if (!this.db) return;
+    const now = new Date().toISOString();
+    this.db.prepare('UPDATE threads SET status = ?, updated_at = ? WHERE id = ?').run(status, now, id);
+  }
+
   renameProject(id: number, name: string): void {
     if (!this.db) return;
     this.db.prepare('UPDATE projects SET name = ? WHERE id = ?').run(name, id);

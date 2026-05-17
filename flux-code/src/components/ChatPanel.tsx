@@ -45,8 +45,9 @@ function saveFavModels(ids: string[]) {
 
 export default function ChatPanel({ activeThread, activeProject, onAddThread }: Props) {
   const [input, setInput] = useState('');
-  const [messages] = useState<any[]>([]);
-  const isGenerating = false;
+  const [messages, setMessages] = useState<any[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
 
   const [openDropdown, setOpenDropdown] = useState<null | 'model' | 'access' | 'variant'>(null);
   const [selectedModel, setSelectedModel] = useState(MODELS[0]);
@@ -58,6 +59,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
 
   const toolbarRef = useRef<HTMLDivElement>(null);
   const sortedModelsRef = useRef(MODELS);
+  const generatingRef = useRef(false);
 
   // Global shortcuts for model selection (Ctrl+1..Ctrl+4)
   useEffect(() => {
@@ -103,6 +105,46 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     });
   };
 
+  // Load messages when thread changes
+  useEffect(() => {
+    if (!activeThread) {
+      setMessages([]);
+      return;
+    }
+    window.electronAPI.chat.getMessages(activeThread.id).then(setMessages);
+  }, [activeThread?.id]);
+
+  // Listen for streaming tokens
+  useEffect(() => {
+    const unsubToken = window.electronAPI.onChatToken(({ threadId, token }) => {
+      if (threadId === activeThread?.id) {
+        setStreamingContent(prev => prev + token);
+      }
+    });
+    const unsubDone = window.electronAPI.onChatDone(({ threadId }) => {
+      if (threadId === activeThread?.id) {
+        setIsGenerating(false);
+        generatingRef.current = false;
+        setStreamingContent('');
+        // Refresh messages from DB
+        window.electronAPI.chat.getMessages(threadId).then(setMessages);
+      }
+    });
+    const unsubError = window.electronAPI.onChatError(({ threadId, error }) => {
+      if (threadId === activeThread?.id) {
+        setIsGenerating(false);
+        generatingRef.current = false;
+        setStreamingContent('');
+        alert('Chat error: ' + error);
+      }
+    });
+    return () => {
+      unsubToken();
+      unsubDone();
+      unsubError();
+    };
+  }, [activeThread?.id]);
+
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
@@ -113,9 +155,26 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const handleSend = () => {
-    if (!input.trim() || !activeThread) return;
+  const handleSend = async () => {
+    if (!input.trim() || !activeThread || generatingRef.current) return;
+    const text = input.trim();
     setInput('');
+    setIsGenerating(true);
+    generatingRef.current = true;
+    setStreamingContent('');
+
+    // Optimistically add user message to UI
+    setMessages(prev => [...prev, { role: 'user', content: text }]);
+
+    await window.electronAPI.chat.sendMessage(activeThread.id, text, selectedModel.id);
+  };
+
+  const handleCancel = () => {
+    if (!activeThread) return;
+    window.electronAPI.chat.cancel(activeThread.id);
+    setIsGenerating(false);
+    generatingRef.current = false;
+    setStreamingContent('');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -169,6 +228,14 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
             <div className="message-content">{msg.content}</div>
           </div>
         ))}
+        {isGenerating && streamingContent && (
+          <div className="message message-assistant">
+            <div className="message-avatar">
+              <img src={logo} alt="AI" className="msg-avatar-img" />
+            </div>
+            <div className="message-content">{streamingContent}</div>
+          </div>
+        )}
       </div>
 
       <div className="chat-input-area">
@@ -321,7 +388,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
             </div>
 
             {isGenerating ? (
-              <button className="send-circle stop" title="Stop">
+              <button className="send-circle stop" onClick={handleCancel} title="Stop">
                 <Square size={16} />
               </button>
             ) : (

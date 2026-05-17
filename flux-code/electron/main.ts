@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, globalShortcut, shell } from 'electron';
 import * as path from 'path';
 import { DatabaseManager } from './db';
+import { initChat, cleanupChat } from './chat';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -109,6 +110,7 @@ app.whenReady().then(() => {
   app.setAppUserModelId('com.fluxcode.app');
   console.log('[Electron] App ready. isDev =', isDev);
   dbManager.init();
+  initChat(dbManager);
   createWindow();
   createTray();
 
@@ -132,6 +134,7 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  cleanupChat();
   dbManager.close();
 });
 

@@ -30,6 +30,14 @@ export interface ElectronAPI {
     close: () => Promise<void>;
     isMaximized: () => Promise<boolean>;
   };
+  chat: {
+    getMessages: (threadId: number) => Promise<any[]>;
+    sendMessage: (threadId: number, message: string, model: string) => Promise<void>;
+    cancel: (threadId: number) => Promise<void>;
+  };
+  onChatToken: (callback: (data: { threadId: number; token: string }) => void) => () => void;
+  onChatDone: (callback: (data: { threadId: number }) => void) => () => void;
+  onChatError: (callback: (data: { threadId: number; error: string }) => void) => () => void;
   onNavigate: (callback: (path: string) => void) => () => void;
 }
 
@@ -62,6 +70,26 @@ const api: ElectronAPI = {
     maximize: () => ipcRenderer.invoke('window:maximize'),
     close: () => ipcRenderer.invoke('window:close'),
     isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  },
+  chat: {
+    getMessages: (threadId) => ipcRenderer.invoke('chat:getMessages', threadId),
+    sendMessage: (threadId, message, model) => ipcRenderer.invoke('chat:sendMessage', threadId, message, model),
+    cancel: (threadId) => ipcRenderer.invoke('chat:cancel', threadId),
+  },
+  onChatToken: (callback) => {
+    const handler = (_: any, data: any) => callback(data);
+    ipcRenderer.on('chat:token', handler);
+    return () => ipcRenderer.removeListener('chat:token', handler);
+  },
+  onChatDone: (callback) => {
+    const handler = (_: any, data: any) => callback(data);
+    ipcRenderer.on('chat:done', handler);
+    return () => ipcRenderer.removeListener('chat:done', handler);
+  },
+  onChatError: (callback) => {
+    const handler = (_: any, data: any) => callback(data);
+    ipcRenderer.on('chat:error', handler);
+    return () => ipcRenderer.removeListener('chat:error', handler);
   },
   onNavigate: (callback) => {
     const handler = (_: any, path: string) => callback(path);
