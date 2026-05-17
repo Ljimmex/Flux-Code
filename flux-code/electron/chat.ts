@@ -181,6 +181,9 @@ export function initChat(db: DatabaseManager): void {
       const { provider } = getProviderAndModel(model);
       if (provider === 'ollama') {
         await streamOllama(event, threadId, messages, model, abortController);
+      } else if (provider === 'claude') {
+        event.sender.send('chat:error', { threadId, error: 'Claude CLI integration is coming soon. Please use Codex CLI or Ollama for now.' });
+        dbManager.updateThreadStatus(threadId, 'idle');
       } else if (provider === 'opencode') {
         event.sender.send('chat:error', { threadId, error: 'OpenCode CLI integration is coming soon. Please use Codex CLI or Ollama for now.' });
         dbManager.updateThreadStatus(threadId, 'idle');

@@ -2802,6 +2802,128 @@ textarea {
   flex: 1;
 }
 
+/* Provider accent colors */
+.provider-colors {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.provider-color-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.provider-color-dot:hover {
+  transform: scale(1.1);
+}
+
+.provider-color-dot.active {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 0 4px var(--text-primary);
+}
+
+/* Provider env vars */
+.provider-env-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.provider-env-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.provider-env-key {
+  color: var(--accent-primary);
+  font-weight: 500;
+}
+
+.provider-env-sep {
+  color: var(--text-muted);
+}
+
+.provider-env-val {
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.provider-env-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  transition: all 0.15s;
+}
+
+.provider-env-remove:hover {
+  background: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+}
+
+.provider-env-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  align-items: center;
+}
+
+.provider-env-add .settings-input {
+  flex: 1;
+}
+
+/* Provider model row actions */
+.provider-model-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.provider-model-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.provider-model-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.provider-model-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.provider-model-btn.danger:hover {
+  background: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+}
+
 /* ===== SELECTION ===== */
 ::selection {
   background: var(--accent-dim);

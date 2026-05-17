@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 're
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   SlidersHorizontal, Keyboard, Cpu, GitBranch,
-  Globe, Archive, Trash2, Plus, CodexIcon, OllamaIcon, OpenCodeIcon
+  Globe, Archive, Trash2, Plus, XIcon, CodexIcon, OllamaIcon, OpenCodeIcon, ClaudeIcon
 } from './icons';
 import type { Project, Thread } from '../App';
 
@@ -158,17 +158,41 @@ function ProviderCard({
   onRemoveModel: (model: string) => void;
 }) {
   const [newModel, setNewModel] = useState('');
-  const Icon = provider.icon === 'codex' ? CodexIcon : provider.icon === 'opencode' ? OpenCodeIcon : OllamaIcon;
+  const [newEnvKey, setNewEnvKey] = useState('');
+  const [newEnvVal, setNewEnvVal] = useState('');
+  const Icon = provider.icon === 'codex' ? CodexIcon : provider.icon === 'opencode' ? OpenCodeIcon : provider.icon === 'claude' ? ClaudeIcon : OllamaIcon;
+
+  const homeLabel = provider.id === 'codex' ? 'CODEX_HOME path'
+    : provider.id === 'claude' ? 'Config directory'
+    : provider.id === 'ollama' ? 'OLLAMA_HOST'
+    : 'Home path';
+  const homePlaceholder = provider.id === 'codex' ? '~/.codex'
+    : provider.id === 'claude' ? '~/.config/claude'
+    : provider.id === 'ollama' ? 'http://localhost:11434'
+    : '';
+
+  const addEnvVar = () => {
+    if (!newEnvKey.trim()) return;
+    const next = [...provider.envVars, { key: newEnvKey.trim(), value: newEnvVal.trim() }];
+    onUpdate({ envVars: next });
+    setNewEnvKey('');
+    setNewEnvVal('');
+  };
+
+  const removeEnvVar = (idx: number) => {
+    const next = provider.envVars.filter((_, i) => i !== idx);
+    onUpdate({ envVars: next });
+  };
 
   return (
     <div className={`provider-card ${expanded ? 'expanded' : ''}`}>
       <div className="provider-header" onClick={onToggleExpand}>
         <div className="provider-info">
-          <div className="provider-icon">
+          <div className="provider-icon" style={{ color: provider.accentColor }}>
             <Icon size={20} />
           </div>
           <div className="provider-name-group">
-            <span className="provider-name">{provider.name}</span>
+            <span className="provider-name">{provider.displayName || provider.name}</span>
             <span className="provider-status">
               {provider.enabled
                 ? `${provider.models.length} models available`
@@ -183,31 +207,143 @@ function ProviderCard({
 
       {expanded && (
         <div className="provider-details">
+          {/* Display name */}
           <div className="provider-field">
-            <label className="provider-label">Binary Path</label>
+            <label className="provider-label">Display name</label>
             <input
               className="settings-input"
               type="text"
-              placeholder={provider.id === 'codex' ? 'codex' : provider.id === 'ollama' ? 'ollama' : 'opencode'}
+              placeholder={provider.name}
+              value={provider.displayName || ''}
+              onChange={(e) => onUpdate({ displayName: e.target.value })}
+            />
+            <span className="provider-hint">Optional label shown in the provider list.</span>
+          </div>
+
+          {/* Accent color */}
+          <div className="provider-field">
+            <label className="provider-label">Accent color</label>
+            <div className="provider-colors">
+              {ACCENT_COLORS.map(color => (
+                <button
+                  key={color}
+                  className={`provider-color-dot ${provider.accentColor === color ? 'active' : ''}`}
+                  style={{ backgroundColor: color }}
+                  onClick={() => onUpdate({ accentColor: color })}
+                  aria-label={`Select color ${color}`}
+                />
+              ))}
+            </div>
+            <span className="provider-hint">Used to distinguish this instance in picker rails and model lists.</span>
+          </div>
+
+          {/* Environment variables */}
+          <div className="provider-field">
+            <div className="provider-env-header">
+              <label className="provider-label">Environment variables</label>
+            </div>
+            <span className="provider-hint">Add variables to pass API keys, base URLs, or other per-instance CLI settings.</span>
+            {provider.envVars.length > 0 && (
+              <div className="provider-env-list">
+                {provider.envVars.map((env, idx) => (
+                  <div key={idx} className="provider-env-item">
+                    <span className="provider-env-key">{env.key}</span>
+                    <span className="provider-env-sep">=</span>
+                    <span className="provider-env-val">{env.value ? '••••••••' : '(empty)'}</span>
+                    <button className="provider-env-remove" onClick={() => removeEnvVar(idx)} title="Remove">
+                      <XIcon size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="provider-env-add">
+              <input
+                className="settings-input"
+                placeholder="KEY"
+                value={newEnvKey}
+                onChange={(e) => setNewEnvKey(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addEnvVar(); }}
+              />
+              <input
+                className="settings-input"
+                placeholder="value"
+                value={newEnvVal}
+                onChange={(e) => setNewEnvVal(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addEnvVar(); }}
+              />
+              <button className="settings-btn" onClick={addEnvVar}>
+                <Plus size={12} /><span>Add</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Binary path */}
+          <div className="provider-field">
+            <label className="provider-label">Binary path</label>
+            <input
+              className="settings-input"
+              type="text"
+              placeholder={provider.id === 'codex' ? 'codex' : provider.id === 'ollama' ? 'ollama' : provider.id === 'claude' ? 'claude' : 'opencode'}
               value={provider.binaryPath || ''}
               onChange={(e) => onUpdate({ binaryPath: e.target.value })}
             />
-            <span className="provider-hint">Path to the {provider.name} CLI binary. Leave empty to use command from PATH.</span>
+            <span className="provider-hint">Path to the {provider.name} binary used by this instance.</span>
           </div>
 
+          {/* Home path */}
+          <div className="provider-field">
+            <label className="provider-label">{homeLabel}</label>
+            <input
+              className="settings-input"
+              type="text"
+              placeholder={homePlaceholder}
+              value={provider.homePath || ''}
+              onChange={(e) => onUpdate({ homePath: e.target.value })}
+            />
+            <span className="provider-hint">
+              {provider.id === 'codex' ? 'Custom Codex home and config directory.'
+                : provider.id === 'ollama' ? 'Ollama server host URL or config path.'
+                : provider.id === 'claude' ? 'Custom Claude config directory.'
+                : 'Custom home path.'}
+            </span>
+          </div>
+
+          {/* Shadow home path (Codex only) */}
+          {provider.id === 'codex' && (
+            <div className="provider-field">
+              <label className="provider-label">Shadow home path</label>
+              <input
+                className="settings-input"
+                type="text"
+                placeholder="~/.codex-t3/personal"
+                value={provider.shadowHomePath || ''}
+                onChange={(e) => onUpdate({ shadowHomePath: e.target.value })}
+              />
+              <span className="provider-hint">Account-specific Codex home. Keeps auth.json separate while sharing state from CODEX_HOME.</span>
+            </div>
+          )}
+
+          {/* Models */}
           <div className="provider-field">
             <label className="provider-label">Models</label>
+            <span className="provider-hint">{provider.models.length} models available.</span>
             <div className="provider-models">
               {provider.models.map(model => (
                 <div key={model} className="provider-model-item">
-                  <span>{model}</span>
-                  <button
-                    className="provider-model-remove"
-                    onClick={() => onRemoveModel(model)}
-                    title="Remove model"
-                  >
-                    <Trash2 size={12} />
-                  </button>
+                  <span className="provider-model-name">{model}</span>
+                  <div className="provider-model-actions">
+                    <button className="provider-model-btn" title="Favorite"><span>☆</span></button>
+                    <button className="provider-model-btn" title="Move up"><span>↑</span></button>
+                    <button className="provider-model-btn" title="Move down"><span>↓</span></button>
+                    <button
+                      className="provider-model-btn danger"
+                      onClick={() => onRemoveModel(model)}
+                      title="Remove model"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
               ))}
               <div className="provider-model-add">
@@ -422,16 +558,28 @@ function ArchiveSection({
 }
 
 /* ─── Provider config types & helpers ─── */
+interface EnvVar {
+  key: string;
+  value: string;
+}
+
 interface ProviderConfig {
   id: string;
   name: string;
-  icon: 'codex' | 'ollama' | 'opencode';
+  icon: 'codex' | 'ollama' | 'opencode' | 'claude';
   enabled: boolean;
+  displayName?: string;
+  accentColor?: string;
   binaryPath?: string;
+  homePath?: string;
+  shadowHomePath?: string;
+  envVars: EnvVar[];
   models: string[];
 }
 
 const PROVIDERS_KEY = 'flux:providers';
+
+const ACCENT_COLORS = ['#3B82F6', '#10B981', '#F97316', '#EF4444', '#A855F7', '#06B6D4'];
 
 const DEFAULT_PROVIDERS: ProviderConfig[] = [
   {
@@ -439,7 +587,11 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     name: 'Codex CLI',
     icon: 'codex',
     enabled: true,
+    accentColor: '#10A37F',
     binaryPath: '',
+    homePath: '',
+    shadowHomePath: '',
+    envVars: [],
     models: ['gpt-4o', 'gpt-4o-mini'],
   },
   {
@@ -447,15 +599,32 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     name: 'Ollama CLI',
     icon: 'ollama',
     enabled: true,
+    accentColor: '#3B82F6',
     binaryPath: '',
+    homePath: '',
+    envVars: [],
     models: ['llama3.2', 'codellama', 'phi3', 'mistral'],
+  },
+  {
+    id: 'claude',
+    name: 'Claude CLI',
+    icon: 'claude',
+    enabled: false,
+    accentColor: '#D97757',
+    binaryPath: '',
+    homePath: '',
+    envVars: [],
+    models: ['claude-3-5-sonnet', 'claude-3-opus'],
   },
   {
     id: 'opencode',
     name: 'OpenCode CLI',
     icon: 'opencode',
     enabled: false,
+    accentColor: '#A855F7',
     binaryPath: '',
+    homePath: '',
+    envVars: [],
     models: ['claude-3-5-sonnet', 'claude-3-opus'],
   },
 ];
