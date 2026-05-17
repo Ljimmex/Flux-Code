@@ -497,3 +497,23 @@ export function OllamaIcon({ size = 16, className }: IconProps) {
     </svg>
   );
 }
+
+export function OpenCodeIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 512 512" fill="none" className={className}>
+      <rect width="512" height="512" fill="#131010"/>
+      <path d="M320 224V352H192V224H320Z" fill="#5A5858"/>
+      <path fillRule="evenodd" clipRule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z" fill="white"/>
+    </svg>
+  );
+}
+
+export function CodexIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+      <rect width="24" height="24" rx="4" fill="#10A37F"/>
+      <path d="M6 12L10 8L10 16L6 12Z" fill="white"/>
+      <rect x="13" y="11" width="5" height="2" rx="1" fill="white"/>
+    </svg>
+  );
+}

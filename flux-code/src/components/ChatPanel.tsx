@@ -9,16 +9,30 @@ interface Props {
   onAddThread: (title: string, mode?: string) => void;
 }
 
-const MODELS = [
-  { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI' },
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI' },
-  { id: 'claude-4', name: 'Claude 4', provider: 'Anthropic' },
-  { id: 'deepseek', name: 'DeepSeek V4', provider: 'DeepSeek' },
-  { id: 'ollama:llama3.2', name: 'Llama 3.2', provider: 'Ollama' },
-  { id: 'ollama:codellama', name: 'Code Llama', provider: 'Ollama' },
-  { id: 'ollama:phi3', name: 'Phi-3', provider: 'Ollama' },
-  { id: 'ollama:mistral', name: 'Mistral', provider: 'Ollama' },
-];
+interface ProviderData {
+  id: string;
+  name: string;
+  enabled: boolean;
+  models: string[];
+}
+
+function loadModelsFromProviders(): { id: string; name: string; provider: string }[] {
+  try {
+    const raw = localStorage.getItem('flux:providers');
+    if (!raw) return [];
+    const providers: ProviderData[] = JSON.parse(raw);
+    const models: { id: string; name: string; provider: string }[] = [];
+    for (const p of providers) {
+      if (!p.enabled) continue;
+      for (const m of p.models) {
+        models.push({ id: `${p.id}:${m}`, name: m, provider: p.name });
+      }
+    }
+    return models;
+  } catch {
+    return [];
+  }
+}
 
 const ACCESS_LEVELS = [
   { id: 'supervised', label: 'Supervised', desc: 'Ask before commands and file changes.', icon: 'lock' },
@@ -55,15 +69,29 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
   const [errorToast, setErrorToast] = useState<string | null>(null);
 
   const [openDropdown, setOpenDropdown] = useState<null | 'model' | 'access' | 'variant'>(null);
-  const [selectedModel, setSelectedModel] = useState(MODELS[0]);
+  const [models, setModels] = useState(() => loadModelsFromProviders());
+  const [selectedModel, setSelectedModel] = useState(() => loadModelsFromProviders()[0] ?? { id: '', name: 'No models', provider: '' });
   const [modelSearch, setModelSearch] = useState('');
+
+  // Refresh models when providers change (listen to storage events)
+  useEffect(() => {
+    const handleStorage = () => {
+      const loaded = loadModelsFromProviders();
+      setModels(loaded);
+      if (loaded.length > 0 && !loaded.find(m => m.id === selectedModel.id)) {
+        setSelectedModel(loaded[0]);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [selectedModel.id]);
   const [selectedAccess, setSelectedAccess] = useState('full');
   const [selectedVariant, setSelectedVariant] = useState('Medium');
   const [selectedAgent, setSelectedAgent] = useState('Build');
   const [favModels, setFavModels] = useState<string[]>(loadFavModels);
 
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const sortedModelsRef = useRef(MODELS);
+  const sortedModelsRef = useRef(loadModelsFromProviders());
   const generatingRef = useRef(false);
 
   // Global shortcuts for model selection (Ctrl+1..Ctrl+4)
@@ -85,7 +113,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const filteredModels = MODELS.filter(m =>
+  const filteredModels = models.filter(m =>
     m.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
     m.provider.toLowerCase().includes(modelSearch.toLowerCase())
   );
@@ -94,7 +122,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     const aFav = favModels.includes(a.id) ? -1 : 0;
     const bFav = favModels.includes(b.id) ? -1 : 0;
     if (aFav !== bFav) return aFav - bFav;
-    return MODELS.findIndex(m => m.id === a.id) - MODELS.findIndex(m => m.id === b.id);
+    return models.findIndex(m => m.id === a.id) - models.findIndex(m => m.id === b.id);
   });
 
   // Update ref during render so keyboard handler always sees current sortedModels

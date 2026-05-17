@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 're
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   SlidersHorizontal, Keyboard, Cpu, GitBranch,
-  Globe, Archive, Trash2, Plus, OpenAIIcon, OllamaIcon
+  Globe, Archive, Trash2, Plus, CodexIcon, OllamaIcon, OpenCodeIcon
 } from './icons';
 import type { Project, Thread } from '../App';
 
@@ -158,7 +158,7 @@ function ProviderCard({
   onRemoveModel: (model: string) => void;
 }) {
   const [newModel, setNewModel] = useState('');
-  const Icon = provider.icon === 'openai' ? OpenAIIcon : OllamaIcon;
+  const Icon = provider.icon === 'codex' ? CodexIcon : provider.icon === 'opencode' ? OpenCodeIcon : OllamaIcon;
 
   return (
     <div className={`provider-card ${expanded ? 'expanded' : ''}`}>
@@ -183,33 +183,17 @@ function ProviderCard({
 
       {expanded && (
         <div className="provider-details">
-          {provider.id === 'openai' && (
-            <div className="provider-field">
-              <label className="provider-label">API Key</label>
-              <input
-                className="settings-input"
-                type="password"
-                placeholder="sk-..."
-                value={provider.apiKey || ''}
-                onChange={(e) => onUpdate({ apiKey: e.target.value })}
-              />
-              <span className="provider-hint">Stored locally in SQLite settings.</span>
-            </div>
-          )}
-
-          {provider.id === 'ollama' && (
-            <div className="provider-field">
-              <label className="provider-label">Base URL</label>
-              <input
-                className="settings-input"
-                type="text"
-                placeholder="http://localhost:11434"
-                value={provider.baseUrl || ''}
-                onChange={(e) => onUpdate({ baseUrl: e.target.value })}
-              />
-              <span className="provider-hint">Leave default if Ollama runs locally.</span>
-            </div>
-          )}
+          <div className="provider-field">
+            <label className="provider-label">Binary Path</label>
+            <input
+              className="settings-input"
+              type="text"
+              placeholder={provider.id === 'codex' ? 'codex' : provider.id === 'ollama' ? 'ollama' : 'opencode'}
+              value={provider.binaryPath || ''}
+              onChange={(e) => onUpdate({ binaryPath: e.target.value })}
+            />
+            <span className="provider-hint">Path to the {provider.name} CLI binary. Leave empty to use command from PATH.</span>
+          </div>
 
           <div className="provider-field">
             <label className="provider-label">Models</label>
@@ -441,10 +425,9 @@ function ArchiveSection({
 interface ProviderConfig {
   id: string;
   name: string;
-  icon: 'openai' | 'ollama';
+  icon: 'codex' | 'ollama' | 'opencode';
   enabled: boolean;
-  apiKey?: string;
-  baseUrl?: string;
+  binaryPath?: string;
   models: string[];
 }
 
@@ -452,20 +435,28 @@ const PROVIDERS_KEY = 'flux:providers';
 
 const DEFAULT_PROVIDERS: ProviderConfig[] = [
   {
-    id: 'openai',
-    name: 'OpenAI',
-    icon: 'openai',
+    id: 'codex',
+    name: 'Codex CLI',
+    icon: 'codex',
     enabled: true,
-    apiKey: '',
-    models: ['gpt-4', 'gpt-4o-mini'],
+    binaryPath: '',
+    models: ['gpt-4o', 'gpt-4o-mini'],
   },
   {
     id: 'ollama',
-    name: 'Ollama',
+    name: 'Ollama CLI',
     icon: 'ollama',
     enabled: true,
-    baseUrl: 'http://localhost:11434',
+    binaryPath: '',
     models: ['llama3.2', 'codellama', 'phi3', 'mistral'],
+  },
+  {
+    id: 'opencode',
+    name: 'OpenCode CLI',
+    icon: 'opencode',
+    enabled: false,
+    binaryPath: '',
+    models: ['claude-3-5-sonnet', 'claude-3-opus'],
   },
 ];
 

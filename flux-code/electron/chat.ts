@@ -12,12 +12,12 @@ let activeStreams = new Map<number, AbortController>();
 
 const OLLAMA_BASE_URL = 'http://localhost:11434';
 
-function isOllamaModel(model: string): boolean {
-  return model.startsWith('ollama:');
-}
-
-function getOllamaModelName(model: string): string {
-  return model.replace('ollama:', '');
+function getProviderAndModel(model: string): { provider: string; modelName: string } {
+  const parts = model.split(':');
+  if (parts.length >= 2) {
+    return { provider: parts[0], modelName: parts.slice(1).join(':') };
+  }
+  return { provider: 'codex', modelName: model };
 }
 
 async function streamOpenAI(
@@ -27,6 +27,7 @@ async function streamOpenAI(
   model: string,
   abortController: AbortController
 ) {
+  const { modelName } = getProviderAndModel(model);
   const apiKey = dbManager.getSettings()['openai_api_key'];
   if (!apiKey) {
     event.sender.send('chat:error', { threadId, error: 'OpenAI API key not configured. Add it in Settings > Providers.' });
@@ -38,7 +39,7 @@ async function streamOpenAI(
 
   const stream = await openai.chat.completions.create(
     {
-      model: model || 'gpt-4o-mini',
+      model: modelName || 'gpt-4o-mini',
       messages,
       stream: true,
     },
@@ -74,7 +75,7 @@ async function streamOllama(
   model: string,
   abortController: AbortController
 ) {
-  const ollamaModel = getOllamaModelName(model);
+  const { modelName: ollamaModel } = getProviderAndModel(model);
 
   try {
     const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
@@ -177,8 +178,12 @@ export function initChat(db: DatabaseManager): void {
     activeStreams.set(threadId, abortController);
 
     try {
-      if (isOllamaModel(model)) {
+      const { provider } = getProviderAndModel(model);
+      if (provider === 'ollama') {
         await streamOllama(event, threadId, messages, model, abortController);
+      } else if (provider === 'opencode') {
+        event.sender.send('chat:error', { threadId, error: 'OpenCode CLI integration is coming soon. Please use Codex CLI or Ollama for now.' });
+        dbManager.updateThreadStatus(threadId, 'idle');
       } else {
         await streamOpenAI(event, threadId, messages, model, abortController);
       }
