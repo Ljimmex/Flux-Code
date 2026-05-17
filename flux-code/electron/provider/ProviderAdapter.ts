@@ -13,6 +13,11 @@ import type {
  */
 export interface ProviderAdapter {
   readonly kind: ProviderKind;
+  /** Custom binary path (e.g. /usr/local/bin/codex). Falls back to command name. */
+  binaryPath: string;
+
+  /** Override the binary path used for spawn/exec. */
+  setBinaryPath(path: string): void;
 
   /** Check if CLI is installed and authenticated. Called on startup and every 30s. */
   probe(): Promise<ProviderStatus>;

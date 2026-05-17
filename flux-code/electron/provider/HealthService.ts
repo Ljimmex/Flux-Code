@@ -79,11 +79,15 @@ export class HealthService {
     const prev = this.statuses.get(kind);
     this.statuses.set(kind, status);
 
-    if (status.kind === 'ready' && status.models.length > 0) {
+    // Cache models from any status variant that provides them
+    const modelList = status.kind === 'ready'
+      ? status.models
+      : (status as any).models;
+    if (Array.isArray(modelList) && modelList.length > 0) {
       const prevModels = this.modelCache.get(kind);
-      this.modelCache.set(kind, status.models);
-      if (JSON.stringify(prevModels) !== JSON.stringify(status.models)) {
-        this.onModelsChange(kind, status.models);
+      this.modelCache.set(kind, modelList);
+      if (JSON.stringify(prevModels) !== JSON.stringify(modelList)) {
+        this.onModelsChange(kind, modelList);
       }
     }
 

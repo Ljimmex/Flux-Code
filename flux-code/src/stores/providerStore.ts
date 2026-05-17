@@ -8,6 +8,8 @@ export type ProviderStatus =
   | { kind: 'error'; message: string };
 
 const ENABLED_KEY = 'flux:providers:enabled';
+const MODEL_META_KEY = 'flux:providers:modelMeta';
+const BINARY_PATHS_KEY = 'flux:providers:binaryPaths';
 
 function loadEnabled(): Record<ProviderKind, boolean> {
   try {
@@ -28,6 +30,37 @@ function saveEnabled(enabled: Record<ProviderKind, boolean>) {
   localStorage.setItem(ENABLED_KEY, JSON.stringify(enabled));
 }
 
+export interface ModelMeta {
+  favorite?: boolean;
+  hidden?: boolean;
+  order?: number;
+  reasoning?: boolean;
+}
+
+function loadModelMeta(): Record<string, ModelMeta> {
+  try {
+    const raw = localStorage.getItem(MODEL_META_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {};
+}
+
+function saveModelMeta(meta: Record<string, ModelMeta>) {
+  localStorage.setItem(MODEL_META_KEY, JSON.stringify(meta));
+}
+
+function loadBinaryPaths(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(BINARY_PATHS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {};
+}
+
+function saveBinaryPaths(paths: Record<string, string>) {
+  localStorage.setItem(BINARY_PATHS_KEY, JSON.stringify(paths));
+}
+
 interface ProviderState {
   // Status of each provider from HealthService
   statuses: Record<string, ProviderStatus>;
@@ -35,6 +68,10 @@ interface ProviderState {
   models: Record<string, string[]>;
   // Enabled/disabled per provider
   enabledProviders: Record<ProviderKind, boolean>;
+  // Per-model metadata (favorite, hidden, order, reasoning)
+  modelMeta: Record<string, ModelMeta>;
+  // Custom binary paths per provider
+  binaryPaths: Record<string, string>;
   // Active provider and model for new conversations
   activeProvider: ProviderKind;
   activeModel: string;
@@ -49,6 +86,9 @@ interface ProviderState {
   setStatus: (kind: ProviderKind, status: ProviderStatus) => void;
   setModels: (kind: ProviderKind, models: string[]) => void;
   toggleProvider: (kind: ProviderKind) => void;
+  setModelMeta: (modelId: string, meta: Partial<ModelMeta>) => void;
+  moveModel: (provider: ProviderKind, model: string, direction: 'up' | 'down') => void;
+  setBinaryPath: (kind: ProviderKind, path: string) => void;
   setActiveProvider: (kind: ProviderKind) => void;
   setActiveModel: (model: string) => void;
   appendStreamChunk: (turnId: string, text: string) => void;
@@ -60,6 +100,8 @@ export const useProviderStore = create<ProviderState>((set) => ({
   statuses: {},
   models: {},
   enabledProviders: loadEnabled(),
+  modelMeta: loadModelMeta(),
+  binaryPaths: loadBinaryPaths(),
   activeProvider: 'ollama',
   activeModel: DEFAULT_MODEL['ollama'],
   streamingTurnId: null,
@@ -78,6 +120,38 @@ export const useProviderStore = create<ProviderState>((set) => ({
       const next = { ...s.enabledProviders, [kind]: !s.enabledProviders[kind] };
       saveEnabled(next);
       return { enabledProviders: next };
+    }),
+
+  setModelMeta: (modelId, meta) =>
+    set((s) => {
+      const next = { ...s.modelMeta, [modelId]: { ...s.modelMeta[modelId], ...meta } };
+      saveModelMeta(next);
+      return { modelMeta: next };
+    }),
+
+  moveModel: (provider, model, direction) =>
+    set((s) => {
+      const list = s.models[provider] ?? [];
+      const idx = list.indexOf(model);
+      if (idx < 0) return s;
+      const newIdx = direction === 'up' ? Math.max(0, idx - 1) : Math.min(list.length - 1, idx + 1);
+      if (newIdx === idx) return s;
+      const newList = [...list];
+      [newList[idx], newList[newIdx]] = [newList[newIdx], newList[idx]];
+      // Save order in meta
+      const meta = { ...s.modelMeta };
+      newList.forEach((m, i) => {
+        meta[`${provider}:${m}`] = { ...meta[`${provider}:${m}`], order: i };
+      });
+      saveModelMeta(meta);
+      return { models: { ...s.models, [provider]: newList }, modelMeta: meta };
+    }),
+
+  setBinaryPath: (kind, path) =>
+    set((s) => {
+      const next = { ...s.binaryPaths, [kind]: path };
+      saveBinaryPaths(next);
+      return { binaryPaths: next };
     }),
 
   setActiveProvider: (kind) =>

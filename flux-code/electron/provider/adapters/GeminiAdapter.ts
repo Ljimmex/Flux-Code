@@ -7,12 +7,19 @@ import type {
   SessionStartOpts, TurnSendOpts,
 } from '../types';
 
+const MODELS = ['gemini-2.5-pro', 'gemini-2.5-flash'];
+
 /**
  * Gemini adapter.
  * Spawns `gemini` CLI subprocess.
  */
 export class GeminiAdapter implements ProviderAdapter {
   readonly kind: ProviderKind = 'gemini';
+  binaryPath = 'gemini';
+
+  setBinaryPath(path: string) {
+    this.binaryPath = path || 'gemini';
+  }
 
   private sessions = new Map<string, {
     process: ChildProcess;
@@ -24,23 +31,31 @@ export class GeminiAdapter implements ProviderAdapter {
 
   async probe(): Promise<ProviderStatus> {
     try {
-      execSync('gemini --version', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
+      const opts = { timeout: 5000, stdio: 'ignore' as const };
+      if (process.platform === 'win32') (opts as any).shell = true;
+      execSync(`${this.binaryPath} --version`, opts);
     } catch {
-      return { kind: 'not-installed' };
+      return { kind: 'not-installed', models: MODELS };
     }
 
     try {
-      execSync('gemini auth status', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
-      return { kind: 'ready', models: ['gemini-2.5-pro', 'gemini-2.5-flash'] };
-    } catch {
-      return { kind: 'not-authenticated', installCmd: 'gemini auth login' };
+      const opts = { timeout: 5000, stdio: 'ignore' as const };
+      if (process.platform === 'win32') (opts as any).shell = true;
+      execSync(`${this.binaryPath} auth status`, opts);
+      return { kind: 'ready', models: MODELS };
+    } catch (err: any) {
+      // If "auth status" subcommand doesn't exist, assume the CLI is usable
+      if (err.code === 'ENOENT' || (err.message && err.message.includes('auth status'))) {
+        return { kind: 'ready', models: MODELS };
+      }
+      return { kind: 'not-authenticated', installCmd: 'gemini auth login', models: MODELS };
     }
   }
 
   async startSession(opts: SessionStartOpts): Promise<void> {
     this.emit({ type: 'session.starting', sessionId: opts.sessionId });
 
-    const proc = spawn('gemini', ['--model', opts.model], {
+    const proc = spawn(this.binaryPath, ['--model', opts.model], {
       cwd: opts.projectPath,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' },

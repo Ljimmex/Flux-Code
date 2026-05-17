@@ -21,30 +21,24 @@ interface SessionState {
  */
 export class KimiAdapter implements ProviderAdapter {
   readonly kind: ProviderKind = 'kimi';
+  binaryPath = 'kimi-cli';
+
+  setBinaryPath(_path: string) {
+    // Kimi uses REST API; binary path is not used for spawn.
+  }
 
   private sessions = new Map<string, SessionState>();
   private eventHandlers = new Set<(event: ProviderRuntimeEvent) => void>();
 
   async probe(): Promise<ProviderStatus> {
     const apiKey = this.readApiKey();
+    const fallbackModels = ['kimi-k2.6', 'kimi-k2.5'];
     if (!apiKey) {
-      return { kind: 'not-authenticated', installCmd: 'kimi-cli auth login' };
+      return { kind: 'not-authenticated', installCmd: 'kimi-cli auth login', models: fallbackModels };
     }
 
-    try {
-      const res = await fetch(`${KIMI_BASE_URL}/models`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!res.ok) {
-        return { kind: 'not-authenticated', installCmd: 'kimi-cli auth login' };
-      }
-      const data = await res.json() as { data: Array<{ id: string }> };
-      const models = data.data.map((m) => m.id).filter((id) => id.startsWith('kimi'));
-      return { kind: 'ready', models: models.length ? models : ['kimi-k2.6', 'kimi-k2.5'] };
-    } catch {
-      return { kind: 'error', message: 'Cannot connect to api.moonshot.ai' };
-    }
+    // If we have an API key, assume ready. The actual validation happens at chat time.
+    return { kind: 'ready', models: fallbackModels };
   }
 
   async startSession(opts: SessionStartOpts): Promise<void> {

@@ -40,4 +40,9 @@ export class ProviderAdapterRegistry {
   getKinds(): ProviderKind[] {
     return Array.from(this.adapters.keys());
   }
+
+  setBinaryPath(kind: ProviderKind, path: string): void {
+    const adapter = this.adapters.get(kind);
+    if (adapter) adapter.setBinaryPath(path);
+  }
 }

@@ -7,6 +7,8 @@ import type {
   SessionStartOpts, TurnSendOpts,
 } from '../types';
 
+const MODELS = ['codex-1', 'o3', 'o4-mini'];
+
 /**
  * Codex CLI adapter.
  * In the full T3 Code architecture this uses JSON-RPC over stdio.
@@ -15,6 +17,11 @@ import type {
  */
 export class CodexAdapter implements ProviderAdapter {
   readonly kind: ProviderKind = 'codex';
+  binaryPath = 'codex';
+
+  setBinaryPath(path: string) {
+    this.binaryPath = path || 'codex';
+  }
 
   private sessions = new Map<string, {
     process: ChildProcess;
@@ -26,23 +33,31 @@ export class CodexAdapter implements ProviderAdapter {
 
   async probe(): Promise<ProviderStatus> {
     try {
-      execSync('codex --version', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
+      const opts = { timeout: 5000, stdio: 'ignore' as const };
+      if (process.platform === 'win32') (opts as any).shell = true;
+      execSync(`${this.binaryPath} --version`, opts);
     } catch {
-      return { kind: 'not-installed' };
+      return { kind: 'not-installed', models: MODELS };
     }
 
     try {
-      execSync('codex auth status', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
-      return { kind: 'ready', models: ['codex-1', 'o3', 'o4-mini'] };
-    } catch {
-      return { kind: 'not-authenticated', installCmd: 'codex login' };
+      const opts = { timeout: 5000, stdio: 'ignore' as const };
+      if (process.platform === 'win32') (opts as any).shell = true;
+      execSync(`${this.binaryPath} auth status`, opts);
+      return { kind: 'ready', models: MODELS };
+    } catch (err: any) {
+      // If "auth status" subcommand doesn't exist, assume the CLI is usable
+      if (err.code === 'ENOENT' || (err.message && err.message.includes('auth status'))) {
+        return { kind: 'ready', models: MODELS };
+      }
+      return { kind: 'not-authenticated', installCmd: 'codex login', models: MODELS };
     }
   }
 
   async startSession(opts: SessionStartOpts): Promise<void> {
     this.emit({ type: 'session.starting', sessionId: opts.sessionId });
 
-    const proc = spawn('codex', ['--model', opts.model], {
+    const proc = spawn(this.binaryPath, ['--model', opts.model], {
       cwd: opts.projectPath,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' },

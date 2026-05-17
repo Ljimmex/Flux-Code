@@ -7,12 +7,19 @@ import type {
   SessionStartOpts, TurnSendOpts,
 } from '../types';
 
+const MODELS = ['kimi-k2.6', 'claude-opus-4', 'gpt-4o'];
+
 /**
  * OpenCode adapter.
  * Spawns `opencode` CLI subprocess.
  */
 export class OpenCodeAdapter implements ProviderAdapter {
   readonly kind: ProviderKind = 'opencode';
+  binaryPath = 'opencode';
+
+  setBinaryPath(path: string) {
+    this.binaryPath = path || 'opencode';
+  }
 
   private sessions = new Map<string, {
     process: ChildProcess;
@@ -24,23 +31,22 @@ export class OpenCodeAdapter implements ProviderAdapter {
 
   async probe(): Promise<ProviderStatus> {
     try {
-      execSync('opencode --version', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
+      const opts = { timeout: 5000, stdio: 'ignore' as const };
+      if (process.platform === 'win32') (opts as any).shell = true;
+      execSync(`${this.binaryPath} --version`, opts);
     } catch {
       return { kind: 'not-installed' };
     }
 
-    try {
-      execSync('opencode config get provider', { timeout: 5000, stdio: 'ignore', shell: process.platform === 'win32' || undefined } as any);
-      return { kind: 'ready', models: ['kimi-k2.6', 'claude-opus-4', 'gpt-4o'] };
-    } catch {
-      return { kind: 'not-authenticated', installCmd: 'opencode config set provider moonshot' };
-    }
+    // OpenCode auth is provider-side (API keys in provider config).
+    // If the CLI is installed, treat it as ready.
+    return { kind: 'ready', models: MODELS };
   }
 
   async startSession(opts: SessionStartOpts): Promise<void> {
     this.emit({ type: 'session.starting', sessionId: opts.sessionId });
 
-    const proc = spawn('opencode', [], {
+    const proc = spawn(this.binaryPath, [], {
       cwd: opts.projectPath,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' },

@@ -42,6 +42,7 @@ const api = {
         sendTurn: (threadId, turnId, prompt, contextFiles) => ipcRenderer.invoke('provider:sendTurn', threadId, turnId, prompt, contextFiles),
         interruptTurn: (threadId) => ipcRenderer.invoke('provider:interruptTurn', threadId),
         respondToApproval: (threadId, requestId, approved) => ipcRenderer.invoke('provider:respondToApproval', threadId, requestId, approved),
+        setBinaryPath: (kind, binaryPath) => ipcRenderer.invoke('provider:setBinaryPath', kind, binaryPath),
         stopSession: (threadId) => ipcRenderer.invoke('provider:stopSession', threadId),
     },
     onChatToken: (callback) => {

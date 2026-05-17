@@ -45,6 +45,11 @@ export async function initProviders(win: BrowserWindow): Promise<void> {
     await healthService.probeOne(kind);
   });
 
+  ipcMain.handle('provider:setBinaryPath', async (_, kind: ProviderKind, binaryPath: string) => {
+    registry.setBinaryPath(kind, binaryPath);
+    await healthService.probeOne(kind);
+  });
+
   ipcMain.handle('provider:startSession', async (_, params: {
     threadId: number;
     provider: ProviderKind;

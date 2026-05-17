@@ -17,6 +17,11 @@ interface SessionState {
 
 export class OllamaAdapter implements ProviderAdapter {
   readonly kind: ProviderKind = 'ollama';
+  binaryPath = 'ollama';
+
+  setBinaryPath(_path: string) {
+    // Ollama uses a local HTTP server; binary path is not used for spawn.
+  }
 
   private sessions = new Map<string, SessionState>();
   private eventHandlers = new Set<(event: ProviderRuntimeEvent) => void>();
@@ -26,12 +31,12 @@ export class OllamaAdapter implements ProviderAdapter {
       const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { signal: AbortSignal.timeout(5000) });
       const data = await res.json() as { models?: Array<{ name: string; size: number }> };
       if (!Array.isArray(data.models) || data.models.length === 0) {
-        return { kind: 'not-authenticated', installCmd: 'ollama pull llama3.3' };
+        return { kind: 'not-authenticated', installCmd: 'ollama pull llama3.3', models: ['llama3.3', 'llama3.2', 'mistral'] };
       }
       const models = data.models.sort((a, b) => b.size - a.size).map((m) => m.name);
       return { kind: 'ready', models };
     } catch {
-      return { kind: 'not-installed' };
+      return { kind: 'not-installed', models: ['llama3.3', 'llama3.2', 'mistral'] };
     }
   }
 

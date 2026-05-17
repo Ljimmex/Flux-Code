@@ -43,6 +43,7 @@ export interface ElectronAPI {
     sendTurn: (threadId: number, turnId: string, prompt: string, contextFiles?: string[]) => Promise<void>;
     interruptTurn: (threadId: number) => Promise<void>;
     respondToApproval: (threadId: number, requestId: string, approved: boolean) => Promise<void>;
+    setBinaryPath: (kind: string, binaryPath: string) => Promise<void>;
     stopSession: (threadId: number) => Promise<void>;
   };
   onChatToken: (callback: (data: { threadId: number; token: string }) => void) => () => void;
@@ -97,6 +98,7 @@ const api: ElectronAPI = {
     sendTurn: (threadId, turnId, prompt, contextFiles) => ipcRenderer.invoke('provider:sendTurn', threadId, turnId, prompt, contextFiles),
     interruptTurn: (threadId) => ipcRenderer.invoke('provider:interruptTurn', threadId),
     respondToApproval: (threadId, requestId, approved) => ipcRenderer.invoke('provider:respondToApproval', threadId, requestId, approved),
+    setBinaryPath: (kind, binaryPath) => ipcRenderer.invoke('provider:setBinaryPath', kind, binaryPath),
     stopSession: (threadId) => ipcRenderer.invoke('provider:stopSession', threadId),
   },
   onChatToken: (callback) => {

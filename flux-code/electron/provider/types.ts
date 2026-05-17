@@ -25,10 +25,10 @@ export type ProviderRuntimeEvent =
   | { type: 'file.changed'; sessionId: string; path: string; kind: 'created' | 'modified' | 'deleted' };
 
 export type ProviderStatus =
-  | { kind: 'not-installed' }
-  | { kind: 'not-authenticated'; installCmd: string }
+  | { kind: 'not-installed'; models?: string[] }
+  | { kind: 'not-authenticated'; installCmd: string; models?: string[] }
   | { kind: 'ready'; models: string[] }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; models?: string[] };
 
 export interface SessionStartOpts {
   sessionId: string;
