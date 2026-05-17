@@ -632,7 +632,21 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
 function loadProviders(): ProviderConfig[] {
   try {
     const raw = localStorage.getItem(PROVIDERS_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (Array.isArray(saved)) {
+        return DEFAULT_PROVIDERS.map(def => {
+          const s = saved.find((p: any) => p.id === def.id);
+          if (!s) return def;
+          return {
+            ...def,
+            ...s,
+            envVars: Array.isArray(s.envVars) ? s.envVars : def.envVars,
+            models: Array.isArray(s.models) ? s.models : def.models,
+          };
+        });
+      }
+    }
   } catch {}
   return DEFAULT_PROVIDERS;
 }
