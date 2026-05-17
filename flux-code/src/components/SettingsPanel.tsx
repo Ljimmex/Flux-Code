@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 're
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   SlidersHorizontal, Keyboard, Cpu, GitBranch,
-  Globe, Archive, Trash2, Plus, XIcon, CodexIcon, OllamaIcon, OpenCodeIcon, ClaudeIcon
+  Globe, Archive, Trash2, Plus, XIcon, RefreshCw,
+  CodexIcon, OllamaIcon, OpenCodeIcon, ClaudeIcon
 } from './icons';
 import type { Project, Thread } from '../App';
 
@@ -672,6 +673,12 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPa
   /* Providers state */
   const [providers, setProviders] = useState(() => loadProviders());
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
+  const [lastRefreshed, setLastRefreshed] = useState(() => new Date());
+
+  const refreshProviders = () => {
+    setProviders(loadProviders());
+    setLastRefreshed(new Date());
+  };
 
   const updateProvider = (id: string, patch: Partial<ProviderConfig>) => {
     setProviders(prev => {
@@ -863,19 +870,33 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, Props>(function SettingsPa
             )}
 
             {section === 'providers' && (
-              <div className="providers-section">
-                {providers.map(provider => (
-                  <ProviderCard
-                    key={provider.id}
-                    provider={provider}
-                    expanded={expandedProvider === provider.id}
-                    onToggleExpand={() => setExpandedProvider(expandedProvider === provider.id ? null : provider.id)}
-                    onUpdate={(patch) => updateProvider(provider.id, patch)}
-                    onAddModel={(model) => addProviderModel(provider.id, model)}
-                    onRemoveModel={(model) => removeProviderModel(provider.id, model)}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="settings-group-header">
+                  <span className="settings-group-title">Providers</span>
+                  <div className="settings-group-actions">
+                    <span className="settings-group-meta">
+                      Refreshed {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <button className="settings-btn" onClick={refreshProviders}>
+                      <RefreshCw size={14} />
+                      <span>Refresh</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="providers-section">
+                  {providers.map(provider => (
+                    <ProviderCard
+                      key={provider.id}
+                      provider={provider}
+                      expanded={expandedProvider === provider.id}
+                      onToggleExpand={() => setExpandedProvider(expandedProvider === provider.id ? null : provider.id)}
+                      onUpdate={(patch) => updateProvider(provider.id, patch)}
+                      onAddModel={(model) => addProviderModel(provider.id, model)}
+                      onRemoveModel={(model) => removeProviderModel(provider.id, model)}
+                    />
+                  ))}
+                </div>
+              </>
             )}
 
             {section === 'source-control' && (

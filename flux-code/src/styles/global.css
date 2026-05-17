@@ -2290,6 +2290,29 @@ textarea {
   margin-top: 0;
 }
 
+.settings-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  margin-top: 8px;
+}
+
+.settings-group-header .settings-group-title {
+  margin: 0;
+}
+
+.settings-group-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-group-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .setting-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
