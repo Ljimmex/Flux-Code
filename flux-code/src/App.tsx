@@ -6,6 +6,7 @@ import MainPanel from './components/MainPanel';
 import TopBar from './components/TopBar';
 import SearchModal from './components/SearchModal';
 import SettingsPanel, { initTheme, loadShortcuts, type ShortcutId, type Section, type SettingsPanelHandle } from './components/SettingsPanel';
+import { useProviderEvents } from './hooks/useProviderEvents';
 import './styles/global.css';
 
 export interface Project {
@@ -34,6 +35,8 @@ export interface Thread {
 }
 
 export default function App() {
+  useProviderEvents();
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);

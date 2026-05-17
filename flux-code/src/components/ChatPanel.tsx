@@ -2,36 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { ArrowUp, Square, Bot, Lock, Check, Search, Copy } from './icons';
 import logo from '../Fluxavatar.png';
 import type { Thread, Project } from '../App';
+import { useProviderStore } from '../stores/providerStore';
+import type { ProviderKind } from '../types/provider';
 
 interface Props {
   activeThread: Thread | null;
   activeProject: Project | null;
   onAddThread: (title: string, mode?: string) => void;
-}
-
-interface ProviderData {
-  id: string;
-  name: string;
-  enabled: boolean;
-  models: string[];
-}
-
-function loadModelsFromProviders(): { id: string; name: string; provider: string }[] {
-  try {
-    const raw = localStorage.getItem('flux:providers');
-    if (!raw) return [];
-    const providers: ProviderData[] = JSON.parse(raw);
-    const models: { id: string; name: string; provider: string }[] = [];
-    for (const p of providers) {
-      if (!p.enabled) continue;
-      for (const m of p.models) {
-        models.push({ id: `${p.id}:${m}`, name: m, provider: p.name });
-      }
-    }
-    return models;
-  } catch {
-    return [];
-  }
 }
 
 const ACCESS_LEVELS = [
@@ -43,24 +20,6 @@ const ACCESS_LEVELS = [
 const VARIANTS = ['Low', 'Medium', 'High'] as const;
 const AGENTS = ['Build', 'Plan'] as const;
 
-const FAV_MODELS_KEY = 'flux:favModels';
-
-function loadFavModels(): string[] {
-  try {
-    const raw = localStorage.getItem(FAV_MODELS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is string => typeof item === 'string');
-  } catch {
-    return [];
-  }
-}
-
-function saveFavModels(ids: string[]) {
-  localStorage.setItem(FAV_MODELS_KEY, JSON.stringify(ids));
-}
-
 export default function ChatPanel({ activeThread, activeProject, onAddThread }: Props) {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
@@ -69,74 +28,56 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
   const [errorToast, setErrorToast] = useState<string | null>(null);
 
   const [openDropdown, setOpenDropdown] = useState<null | 'model' | 'access' | 'variant'>(null);
-  const [models, setModels] = useState(() => loadModelsFromProviders());
-  const [selectedModel, setSelectedModel] = useState(() => loadModelsFromProviders()[0] ?? { id: '', name: 'No models', provider: '' });
   const [modelSearch, setModelSearch] = useState('');
-
-  // Refresh models when providers change (listen to storage events)
-  useEffect(() => {
-    const handleStorage = () => {
-      const loaded = loadModelsFromProviders();
-      setModels(loaded);
-      if (loaded.length > 0 && !loaded.find(m => m.id === selectedModel.id)) {
-        setSelectedModel(loaded[0]);
-      }
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, [selectedModel.id]);
   const [selectedAccess, setSelectedAccess] = useState('full');
   const [selectedVariant, setSelectedVariant] = useState('Medium');
   const [selectedAgent, setSelectedAgent] = useState('Build');
-  const [favModels, setFavModels] = useState<string[]>(loadFavModels);
+
+  const {
+    statuses, models: providerModels,
+    activeProvider, activeModel,
+    setActiveProvider, setActiveModel,
+    streamingContent: storeStreamingContent,
+    isStreaming: storeIsStreaming,
+    error: storeError,
+    endStreaming, setError,
+  } = useProviderStore();
 
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const sortedModelsRef = useRef(loadModelsFromProviders());
   const generatingRef = useRef(false);
 
-  // Global shortcuts for model selection (Ctrl+1..Ctrl+4)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const current = sortedModelsRef.current;
-      if (e.ctrlKey && !e.altKey && !e.metaKey) {
-        const num = parseInt(e.key, 10);
-        if (!isNaN(num) && num >= 1 && num <= current.length) {
-          e.preventDefault();
-          setSelectedModel(current[num - 1]);
-        }
-      }
-      if (e.key === 'Escape') {
-        setOpenDropdown(null);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  // Build flat model list from provider store
+  const allModels: { provider: ProviderKind; model: string; displayName: string }[] = [];
+  for (const [kind, list] of Object.entries(providerModels)) {
+    for (const m of list) {
+      allModels.push({ provider: kind as ProviderKind, model: m, displayName: m });
+    }
+  }
 
-  const filteredModels = models.filter(m =>
-    m.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
+  const filteredModels = allModels.filter(m =>
+    m.model.toLowerCase().includes(modelSearch.toLowerCase()) ||
     m.provider.toLowerCase().includes(modelSearch.toLowerCase())
   );
 
-  const sortedModels = [...filteredModels].sort((a, b) => {
-    const aFav = favModels.includes(a.id) ? -1 : 0;
-    const bFav = favModels.includes(b.id) ? -1 : 0;
-    if (aFav !== bFav) return aFav - bFav;
-    return models.findIndex(m => m.id === a.id) - models.findIndex(m => m.id === b.id);
-  });
+  // Sync store streaming to local state
+  useEffect(() => {
+    if (storeIsStreaming) {
+      setStreamingContent(storeStreamingContent);
+      setIsGenerating(true);
+      generatingRef.current = true;
+    }
+  }, [storeStreamingContent, storeIsStreaming]);
 
-  // Update ref during render so keyboard handler always sees current sortedModels
-  sortedModelsRef.current = sortedModels;
-
-  const toggleFav = (modelId: string) => {
-    setFavModels(prev => {
-      const next = prev.includes(modelId)
-        ? prev.filter(id => id !== modelId)
-        : [...prev, modelId];
-      saveFavModels(next);
-      return next;
-    });
-  };
+  useEffect(() => {
+    if (storeError) {
+      setErrorToast(storeError);
+      setIsGenerating(false);
+      generatingRef.current = false;
+      setStreamingContent('');
+      endStreaming();
+      setTimeout(() => { setErrorToast(null); setError(null); }, 5000);
+    }
+  }, [storeError]);
 
   // Load messages when thread changes
   useEffect(() => {
@@ -145,38 +86,6 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
       return;
     }
     window.electronAPI.chat.getMessages(activeThread.id).then(setMessages);
-  }, [activeThread?.id]);
-
-  // Listen for streaming tokens
-  useEffect(() => {
-    const unsubToken = window.electronAPI.onChatToken(({ threadId, token }) => {
-      if (threadId === activeThread?.id) {
-        setStreamingContent(prev => prev + token);
-      }
-    });
-    const unsubDone = window.electronAPI.onChatDone(({ threadId }) => {
-      if (threadId === activeThread?.id) {
-        setIsGenerating(false);
-        generatingRef.current = false;
-        setStreamingContent('');
-        // Refresh messages from DB
-        window.electronAPI.chat.getMessages(threadId).then(setMessages);
-      }
-    });
-    const unsubError = window.electronAPI.onChatError(({ threadId, error }) => {
-      if (threadId === activeThread?.id) {
-        setIsGenerating(false);
-        generatingRef.current = false;
-        setStreamingContent('');
-        setErrorToast(error);
-        setTimeout(() => setErrorToast(null), 5000);
-      }
-    });
-    return () => {
-      unsubToken();
-      unsubDone();
-      unsubError();
-    };
   }, [activeThread?.id]);
 
   useEffect(() => {
@@ -200,15 +109,31 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     // Optimistically add user message to UI
     setMessages(prev => [...prev, { role: 'user', content: text }]);
 
-    await window.electronAPI.chat.sendMessage(activeThread.id, text, selectedModel.id);
+    try {
+      await window.electronAPI.provider.startSession({
+        threadId: activeThread.id,
+        provider: activeProvider,
+        model: activeModel,
+        projectPath: activeProject?.path ?? '.',
+      });
+
+      const turnId = `turn_${Date.now()}`;
+      await window.electronAPI.provider.sendTurn(activeThread.id, turnId, text);
+    } catch (err: any) {
+      setErrorToast(err.message || 'Failed to send message');
+      setIsGenerating(false);
+      generatingRef.current = false;
+      setTimeout(() => setErrorToast(null), 5000);
+    }
   };
 
   const handleCancel = () => {
     if (!activeThread) return;
-    window.electronAPI.chat.cancel(activeThread.id);
+    window.electronAPI.provider.interruptTurn(activeThread.id);
     setIsGenerating(false);
     generatingRef.current = false;
     setStreamingContent('');
+    endStreaming();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -315,14 +240,14 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18" />
                   </svg>
-                  <span>{selectedModel.provider} · {selectedModel.name}</span>
+                  <span>{activeProvider} · {activeModel}</span>
                 </button>
 
                 {openDropdown === 'model' && (
                   <div className="toolbar-dropdown model-dropdown">
                     <div className="model-dropdown-header">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
-                      <span>{selectedModel.provider}</span>
+                      <span>{activeProvider}</span>
                     </div>
                     <div className="toolbar-dropdown-search">
                       <Search size={14} />
@@ -333,31 +258,37 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
                         onChange={(e) => setModelSearch(e.target.value)}
                       />
                     </div>
-                    {sortedModels.map((model, i) => {
-                      const isFav = favModels.includes(model.id);
+                    {/* Provider list */}
+                    {(['codex', 'claude', 'opencode', 'ollama', 'kimi', 'gemini'] as ProviderKind[]).map(kind => {
+                      const status = statuses[kind];
+                      const isReady = status?.kind === 'ready';
+                      const modelList = providerModels[kind] ?? [];
+                      if (!isReady || modelList.length === 0) return null;
                       return (
-                        <button
-                          key={model.id}
-                          className={`toolbar-dropdown-item ${selectedModel.id === model.id ? 'active' : ''}`}
-                          onClick={() => { setSelectedModel(model); setOpenDropdown(null); setModelSearch(''); }}
-                        >
-                          <span
-                            className={`model-fav-star ${isFav ? 'fav' : ''}`}
-                            onClick={(e) => { e.stopPropagation(); toggleFav(model.id); }}
-                            title={isFav ? 'Remove from favorites' : 'Add to favorites'}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                              <polygon
-                                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
-                                fill={isFav ? 'currentColor' : 'none'}
-                              />
-                            </svg>
-                          </span>
-                          <span>{model.provider} · {model.name}</span>
-                          <span className="toolbar-dropdown-shortcut">Ctrl+{i + 1}</span>
-                        </button>
+                        <div key={kind}>
+                          <div className="dropdown-section-label" style={{ textTransform: 'capitalize', padding: '6px 12px', fontSize: 11, color: 'var(--text-muted)' }}>{kind}</div>
+                          {modelList.map(m => (
+                            <button
+                              key={`${kind}:${m}`}
+                              className={`toolbar-dropdown-item ${activeProvider === kind && activeModel === m ? 'active' : ''}`}
+                              onClick={() => {
+                                setActiveProvider(kind);
+                                setActiveModel(m);
+                                setOpenDropdown(null);
+                                setModelSearch('');
+                              }}
+                            >
+                              <span>{m}</span>
+                            </button>
+                          ))}
+                        </div>
                       );
                     })}
+                    {filteredModels.length === 0 && (
+                      <div className="toolbar-dropdown-item" style={{ color: 'var(--text-muted)' }}>
+                        <span>No models available. Check provider status in Settings.</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

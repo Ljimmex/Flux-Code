@@ -4,6 +4,8 @@ import { CodexAdapter } from './adapters/CodexAdapter';
 import { ClaudeAdapter } from './adapters/ClaudeAdapter';
 import { OllamaAdapter } from './adapters/OllamaAdapter';
 import { OpenCodeAdapter } from './adapters/OpenCodeAdapter';
+import { KimiAdapter } from './adapters/KimiAdapter';
+import { GeminiAdapter } from './adapters/GeminiAdapter';
 
 /**
  * Central registry of all provider adapters.
@@ -17,6 +19,8 @@ export class ProviderAdapterRegistry {
     this.register(new ClaudeAdapter());
     this.register(new OllamaAdapter());
     this.register(new OpenCodeAdapter());
+    this.register(new KimiAdapter());
+    this.register(new GeminiAdapter());
   }
 
   private register(adapter: ProviderAdapter) {
