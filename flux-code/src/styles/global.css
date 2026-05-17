@@ -1124,6 +1124,7 @@ textarea {
 
 .message-text {
   word-break: break-word;
+  text-align: center;
 }
 
 .message-content-meta {
