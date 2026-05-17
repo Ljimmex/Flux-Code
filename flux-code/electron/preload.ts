@@ -39,12 +39,16 @@ export interface ElectronAPI {
     getStatuses: () => Promise<Record<string, any>>;
     getModels: () => Promise<Record<string, string[]>>;
     probe: (kind: string) => Promise<void>;
-    startSession: (params: any) => Promise<string>;
-    sendTurn: (threadId: number, turnId: string, prompt: string, contextFiles?: string[]) => Promise<void>;
+    startSession: (params: any) => Promise<any>;
+    sendTurn: (threadId: number, turnId: string, prompt: string, contextFiles?: string[]) => Promise<any>;
     interruptTurn: (threadId: number) => Promise<void>;
     respondToApproval: (threadId: number, requestId: string, approved: boolean) => Promise<void>;
+    respondToUserInput: (threadId: number, requestId: string, answers: Record<string, string>) => Promise<void>;
     setBinaryPath: (kind: string, binaryPath: string) => Promise<void>;
     stopSession: (threadId: number) => Promise<void>;
+    listSessions: () => Promise<any[]>;
+    getCapabilities: (kind: string) => Promise<any>;
+    rollbackConversation: (threadId: number, numTurns: number) => Promise<void>;
   };
   onChatToken: (callback: (data: { threadId: number; token: string }) => void) => () => void;
   onChatDone: (callback: (data: { threadId: number }) => void) => () => void;
@@ -98,8 +102,12 @@ const api: ElectronAPI = {
     sendTurn: (threadId, turnId, prompt, contextFiles) => ipcRenderer.invoke('provider:sendTurn', threadId, turnId, prompt, contextFiles),
     interruptTurn: (threadId) => ipcRenderer.invoke('provider:interruptTurn', threadId),
     respondToApproval: (threadId, requestId, approved) => ipcRenderer.invoke('provider:respondToApproval', threadId, requestId, approved),
+    respondToUserInput: (threadId, requestId, answers) => ipcRenderer.invoke('provider:respondToUserInput', threadId, requestId, answers),
     setBinaryPath: (kind, binaryPath) => ipcRenderer.invoke('provider:setBinaryPath', kind, binaryPath),
     stopSession: (threadId) => ipcRenderer.invoke('provider:stopSession', threadId),
+    listSessions: () => ipcRenderer.invoke('provider:listSessions'),
+    getCapabilities: (kind) => ipcRenderer.invoke('provider:getCapabilities', kind),
+    rollbackConversation: (threadId, numTurns) => ipcRenderer.invoke('provider:rollbackConversation', threadId, numTurns),
   },
   onChatToken: (callback) => {
     const handler = (_: any, data: any) => callback(data);

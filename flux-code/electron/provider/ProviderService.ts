@@ -1,20 +1,81 @@
 import type { ProviderAdapterRegistry } from './ProviderAdapterRegistry';
-import type { ProviderKind, ProviderRuntimeEvent } from './types';
-import type { ProviderAdapter } from './ProviderAdapter';
-
-interface ThreadSession {
-  provider: ProviderKind;
-  sessionId: string;
-}
+import type { ProviderSessionDirectory } from './ProviderSessionDirectory';
+import type {
+  ProviderKind,
+  ProviderRuntimeEvent,
+  ProviderSession,
+  ProviderSessionStartInput,
+  ProviderSendTurnInput,
+  ProviderTurnStartResult,
+  ProviderAdapterCapabilities,
+  ProviderApprovalDecision,
+  ProviderUserInputAnswers,
+} from './types';
+import { ProviderSessionError, generateEventId } from './types';
 
 /**
- * Facade over adapters — manages threadId → sessionId → adapter mapping.
+ * Unified facade over adapters.
+ * Manages threadId → session routing and merges event streams from all adapters.
+ *
+ * Aligned with T3 Code ProviderService.
  */
 export class ProviderService {
-  private threadSessions = new Map<number, ThreadSession>();
   private eventHandlers = new Set<(event: ProviderRuntimeEvent) => void>();
+  private unsubAdapterFns: Array<() => void> = [];
 
-  constructor(private registry: ProviderAdapterRegistry) {}
+  constructor(
+    private registry: ProviderAdapterRegistry,
+    private directory: ProviderSessionDirectory,
+  ) {
+    // Subscribe to directory changes and forward as events
+    this.directory.onEvent((dirEvent) => {
+      if (dirEvent.type === 'registered') {
+        this.emit({
+          id: generateEventId(),
+          kind: 'session',
+          provider: dirEvent.session.provider,
+          threadId: dirEvent.session.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'session/connecting',
+        });
+      } else if (dirEvent.type === 'updated') {
+        const s = dirEvent.session;
+        if (s.status === 'ready') {
+          this.emit({
+            id: generateEventId(),
+            kind: 'session',
+            provider: s.provider,
+            threadId: s.threadId,
+            createdAt: new Date().toISOString(),
+            method: 'session/ready',
+          });
+        } else if (s.status === 'error') {
+          this.emit({
+            id: generateEventId(),
+            kind: 'error',
+            provider: s.provider,
+            threadId: s.threadId,
+            createdAt: new Date().toISOString(),
+            method: 'error/session',
+            message: s.lastError,
+          });
+        }
+      } else if (dirEvent.type === 'removed') {
+        const s = this.directory.get(dirEvent.threadId);
+        // s is already removed, but we can emit a generic closed event
+        this.emit({
+          id: generateEventId(),
+          kind: 'session',
+          provider: s?.provider ?? 'codex',
+          threadId: dirEvent.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'session/closed',
+        });
+      }
+    });
+  }
+
+  // ─── Event subscription ───────────────────────────────────────────────────
 
   onEvent(handler: (event: ProviderRuntimeEvent) => void): () => void {
     this.eventHandlers.add(handler);
@@ -22,83 +83,180 @@ export class ProviderService {
   }
 
   private emit(event: ProviderRuntimeEvent) {
-    this.eventHandlers.forEach((h) => h(event));
+    for (const h of this.eventHandlers) {
+      try {
+        h(event);
+      } catch {
+        // ignore
+      }
+    }
   }
 
-  async startSession(params: {
-    threadId: number;
-    provider: ProviderKind;
-    model: string;
-    projectPath: string;
-    systemPrompt?: string;
-  }): Promise<string> {
-    const existing = this.threadSessions.get(params.threadId);
-    if (existing) {
-      await this.stopSession(params.threadId);
-    }
-
-    const sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    const adapter = this.registry.getAdapter(params.provider);
-
-    // Subscribe to adapter events and forward
-    adapter.onEvent((event) => {
+  /** Attach an adapter so its events are merged into the global stream. */
+  private attachAdapterEvents(adapter: import('./ProviderAdapter').ProviderAdapterShape) {
+    const unsub = adapter.onEvent((event) => {
       this.emit(event);
     });
-
-    await adapter.startSession({
-      sessionId,
-      threadId: params.threadId,
-      projectPath: params.projectPath,
-      model: params.model,
-      systemPrompt: params.systemPrompt,
-    });
-
-    this.threadSessions.set(params.threadId, { provider: params.provider, sessionId });
-    return sessionId;
+    this.unsubAdapterFns.push(unsub);
   }
 
-  async sendTurn(threadId: number, turnId: string, prompt: string, contextFiles?: string[]): Promise<void> {
-    const binding = this.threadSessions.get(threadId);
-    if (!binding) throw new Error(`No active session for thread ${threadId}`);
-
-    const adapter = this.registry.getAdapter(binding.provider);
-    await adapter.sendTurn({
-      sessionId: binding.sessionId,
-      turnId,
-      prompt,
-      contextFiles,
-    });
+  /** Call once for every adapter you want to listen to. */
+  registerAdapterEvents(adapter: import('./ProviderAdapter').ProviderAdapterShape) {
+    this.attachAdapterEvents(adapter);
   }
 
-  async interruptTurn(threadId: number): Promise<void> {
-    const binding = this.threadSessions.get(threadId);
-    if (!binding) return;
-    const adapter = this.registry.getAdapter(binding.provider);
-    await adapter.interruptTurn(binding.sessionId);
+  // ─── Session lifecycle ────────────────────────────────────────────────────
+
+  async startSession(input: ProviderSessionStartInput): Promise<ProviderSession> {
+    const existing = this.directory.get(input.threadId);
+    if (existing) {
+      await this.stopSession({ threadId: input.threadId });
+    }
+
+    const provider = input.provider ?? 'codex';
+    const adapter = this.registry.get(provider);
+
+    // Ensure adapter events are wired
+    this.registerAdapterEvents(adapter);
+
+    const now = new Date().toISOString();
+    const preSession: ProviderSession = {
+      provider,
+      status: 'connecting',
+      runtimeMode: input.runtimeMode,
+      threadId: input.threadId,
+      model: input.model,
+      cwd: input.cwd,
+      resumeCursor: input.resumeCursor,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.directory.register(preSession);
+
+    try {
+      const session = await adapter.startSession(input);
+      this.directory.update(input.threadId, { ...session, status: session.status ?? 'ready' });
+      return this.directory.get(input.threadId)!;
+    } catch (err: any) {
+      this.directory.update(input.threadId, {
+        status: 'error',
+        lastError: err?.message ?? String(err),
+      });
+      throw err;
+    }
   }
 
-  async respondToApproval(threadId: number, requestId: string, approved: boolean): Promise<void> {
-    const binding = this.threadSessions.get(threadId);
-    if (!binding) return;
-    const adapter = this.registry.getAdapter(binding.provider);
-    await adapter.respondToApproval(binding.sessionId, requestId, approved);
-  }
+  async stopSession(input: { threadId: number }): Promise<void> {
+    const session = this.directory.get(input.threadId);
+    if (!session) return;
 
-  async stopSession(threadId: number): Promise<void> {
-    const binding = this.threadSessions.get(threadId);
-    if (!binding) return;
-    const adapter = this.registry.getAdapter(binding.provider);
-    await adapter.stopSession(binding.sessionId);
-    this.threadSessions.delete(threadId);
+    const adapter = this.registry.get(session.provider);
+    await adapter.stopSession(input.threadId);
+    this.directory.remove(input.threadId);
   }
 
   async stopAllSessions(): Promise<void> {
+    const sessions = this.directory.list();
     await Promise.allSettled(
-      Array.from(this.threadSessions.keys()).map((threadId) => this.stopSession(threadId)),
+      sessions.map((s) => this.stopSession({ threadId: s.threadId })),
     );
   }
 
-  getActiveSession(threadId: number): ThreadSession | undefined {
-    return this.threadSessions.get(threadId);
+  // ─── Turns ────────────────────────────────────────────────────────────────
+
+  async sendTurn(input: ProviderSendTurnInput): Promise<ProviderTurnStartResult> {
+    const session = this.directory.get(input.threadId);
+    if (!session) {
+      throw new ProviderSessionError(`No active session for thread ${input.threadId}`);
+    }
+
+    const adapter = this.registry.get(session.provider);
+    this.directory.update(input.threadId, { status: 'running', activeTurnId: undefined });
+
+    try {
+      const result = await adapter.sendTurn(input);
+      this.directory.update(input.threadId, { activeTurnId: result.turnId });
+      return result;
+    } catch (err: any) {
+      this.directory.update(input.threadId, {
+        status: 'error',
+        lastError: err?.message ?? String(err),
+      });
+      throw err;
+    }
+  }
+
+  async interruptTurn(input: { threadId: number; turnId?: string }): Promise<void> {
+    const session = this.directory.get(input.threadId);
+    if (!session) return;
+
+    const adapter = this.registry.get(session.provider);
+    await adapter.interruptTurn(input.threadId, input.turnId);
+  }
+
+  // ─── Approvals / User Input ───────────────────────────────────────────────
+
+  async respondToRequest(input: {
+    threadId: number;
+    requestId: string;
+    decision: ProviderApprovalDecision;
+  }): Promise<void> {
+    const session = this.directory.get(input.threadId);
+    if (!session) {
+      throw new ProviderSessionError(`No active session for thread ${input.threadId}`);
+    }
+    const adapter = this.registry.get(session.provider);
+    await adapter.respondToRequest(input.threadId, input.requestId, input.decision);
+  }
+
+  async respondToUserInput(input: {
+    threadId: number;
+    requestId: string;
+    answers: ProviderUserInputAnswers;
+  }): Promise<void> {
+    const session = this.directory.get(input.threadId);
+    if (!session) {
+      throw new ProviderSessionError(`No active session for thread ${input.threadId}`);
+    }
+    const adapter = this.registry.get(session.provider);
+    await adapter.respondToUserInput(input.threadId, input.requestId, input.answers);
+  }
+
+  // ─── Conversation management ──────────────────────────────────────────────
+
+  async rollbackConversation(input: {
+    threadId: number;
+    numTurns: number;
+  }): Promise<void> {
+    const session = this.directory.get(input.threadId);
+    if (!session) {
+      throw new ProviderSessionError(`No active session for thread ${input.threadId}`);
+    }
+    const adapter = this.registry.get(session.provider);
+    await adapter.rollbackThread(input.threadId, input.numTurns);
+  }
+
+  async readThread(threadId: number): Promise<import('./types').ProviderThreadSnapshot> {
+    const session = this.directory.get(threadId);
+    if (!session) {
+      throw new ProviderSessionError(`No active session for thread ${threadId}`);
+    }
+    const adapter = this.registry.get(session.provider);
+    return adapter.readThread(threadId);
+  }
+
+  // ─── Metadata ─────────────────────────────────────────────────────────────
+
+  listSessions(): ProviderSession[] {
+    return this.directory.list();
+  }
+
+  async getCapabilities(provider: ProviderKind): Promise<ProviderAdapterCapabilities> {
+    const adapter = this.registry.get(provider);
+    return adapter.capabilities;
+  }
+
+  getActiveSession(threadId: number): ProviderSession | undefined {
+    return this.directory.get(threadId);
   }
 }

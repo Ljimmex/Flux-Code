@@ -10,7 +10,7 @@ type StatusKind = 'not-installed' | 'not-authenticated' | 'ready' | 'error';
 
 const PROVIDER_ICONS: Record<ProviderKind, React.ComponentType<{ size?: number; className?: string }>> = {
   codex: CodexIcon,
-  claude: ClaudeIcon,
+  claudeCode: ClaudeIcon,
   opencode: OpenCodeIcon,
   ollama: OllamaIcon,
   kimi: KimiIcon,
@@ -24,7 +24,7 @@ const STATUS_COLORS: Record<StatusKind, string> = {
   error: '#f85149',
 };
 
-const ALL_PROVIDERS: ProviderKind[] = ['codex', 'claude', 'opencode', 'ollama', 'kimi', 'gemini'];
+const ALL_PROVIDERS: ProviderKind[] = ['codex', 'claudeCode', 'opencode', 'ollama', 'kimi', 'gemini'];
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
   return (
@@ -78,13 +78,7 @@ function EyeOffBtn({ onClick }: { onClick: () => void }) {
   );
 }
 
-function InfoCircle() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
-      <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
-    </svg>
-  );
-}
+const ACCENT_PRESETS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'];
 
 function ProviderCard({
   kind, status, models, expanded, onToggle, onProbe, enabled, onToggleEnabled,
@@ -99,7 +93,7 @@ function ProviderCard({
   onToggleEnabled: () => void;
 }) {
   const Icon = PROVIDER_ICONS[kind];
-  const displayName = PROVIDER_DISPLAY_NAMES[kind];
+  const defaultDisplayName = PROVIDER_DISPLAY_NAMES[kind];
   const instructions = PROVIDER_AUTH_INSTRUCTIONS[kind];
   const statusKind = (status?.kind as StatusKind) ?? 'not-installed';
   const statusColor = STATUS_COLORS[statusKind];
@@ -109,8 +103,28 @@ function ProviderCard({
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [newModel, setNewModel] = useState('');
-  const { modelMeta, setModelMeta, moveModel, binaryPaths, setBinaryPath } = useProviderStore();
+  const [addingEnv, setAddingEnv] = useState(false);
+  const [newEnvKey, setNewEnvKey] = useState('');
+  const [newEnvValue, setNewEnvValue] = useState('');
+  const {
+    modelMeta, setModelMeta, moveModel,
+    binaryPaths, setBinaryPath,
+    providerLabels, setProviderLabel,
+    accentColors, setAccentColor,
+    envVars, setEnvVar, removeEnvVar,
+    serverUrls, setServerUrl,
+    serverPasswords, setServerPassword,
+    providerDrafts, setHomePath, setShadowHomePath,
+  } = useProviderStore();
   const binaryPath = binaryPaths[kind] ?? '';
+  const label = providerLabels[kind] ?? '';
+  const accent = accentColors[kind] ?? '';
+  const providerEnv = envVars[kind] ?? {};
+  const serverUrl = serverUrls[kind] ?? '';
+  const serverPassword = serverPasswords[kind] ?? '';
+  const draft = providerDrafts[kind] ?? {};
+  const homePath = draft.homePath ?? '';
+  const shadowHomePath = draft.shadowHomePath ?? '';
 
   const handleSaveApiKey = async () => {
     if (!apiKey.trim()) return;
@@ -122,6 +136,8 @@ function ProviderCard({
     setBinaryPath(kind, value);
     window.electronAPI.provider.setBinaryPath(kind, value);
   };
+
+  const displayName = label.trim() || defaultDisplayName;
 
   const sortedModels = [...models].sort((a, b) => {
     const orderA = modelMeta[`${kind}:${a}`]?.order ?? 0;
@@ -138,7 +154,10 @@ function ProviderCard({
             <span className="provider-status-dot-icon" style={{ backgroundColor: statusColor }} title={statusKind.replace('-', ' ')} />
           </div>
           <div className="provider-name-group">
-            <span className="provider-name">{displayName}</span>
+            <span className="provider-name">
+              {displayName}
+              {status?.version && <span className="provider-version">{status.version}</span>}
+            </span>
             <span className="provider-status">
               {isReady
                 ? `${models.length} models available`
@@ -161,6 +180,35 @@ function ProviderCard({
 
       {expanded && (
         <div className="provider-details">
+          {/* Display name */}
+          <div className="provider-field">
+            <label className="provider-label">Display name</label>
+            <input
+              className="settings-input"
+              placeholder={defaultDisplayName}
+              value={label}
+              onChange={(e) => setProviderLabel(kind, e.target.value)}
+            />
+            <span className="provider-hint">Optional label shown in the provider list.</span>
+          </div>
+
+          {/* Accent color */}
+          <div className="provider-field">
+            <label className="provider-label">Accent color</label>
+            <div className="provider-colors">
+              {ACCENT_PRESETS.map((c) => (
+                <button
+                  key={c}
+                  className={`provider-color-dot ${accent === c ? 'active' : ''}`}
+                  style={{ backgroundColor: c }}
+                  onClick={() => setAccentColor(kind, c)}
+                  title={c}
+                />
+              ))}
+            </div>
+            <span className="provider-hint">Used to distinguish this instance in picker rails and model lists.</span>
+          </div>
+
           {/* Binary path */}
           <div className="provider-field">
             <label className="provider-label">Binary path</label>
@@ -170,7 +218,96 @@ function ProviderCard({
               value={binaryPath}
               onChange={(e) => handleBinaryPathChange(e.target.value)}
             />
-            <span className="provider-hint">Path to the {displayName} binary. Leave blank to use default.</span>
+            <span className="provider-hint">Path to the {defaultDisplayName} binary. Leave blank to use default.</span>
+          </div>
+
+          {/* Codex-specific paths */}
+          {kind === 'codex' && (
+            <>
+              <div className="provider-field">
+                <label className="provider-label">CODEX_HOME path</label>
+                <input
+                  className="settings-input"
+                  placeholder="~/.codex"
+                  value={homePath}
+                  onChange={(e) => setHomePath(kind, e.target.value)}
+                />
+                <span className="provider-hint">Custom Codex home and config directory.</span>
+              </div>
+              <div className="provider-field">
+                <label className="provider-label">Shadow home path</label>
+                <input
+                  className="settings-input"
+                  placeholder="~/.codex-t3/personal"
+                  value={shadowHomePath}
+                  onChange={(e) => setShadowHomePath(kind, e.target.value)}
+                />
+                <span className="provider-hint">Account-specific Codex home. Keeps auth.json separate while sharing state from CODEX_HOME.</span>
+              </div>
+            </>
+          )}
+
+          {/* Server URL */}
+          <div className="provider-field">
+            <label className="provider-label">Server URL</label>
+            <input
+              className="settings-input"
+              placeholder="http://127.0.0.1:4096"
+              value={serverUrl}
+              onChange={(e) => setServerUrl(kind, e.target.value)}
+            />
+            <span className="provider-hint">Leave blank to let Flux Code spawn the server when needed.</span>
+          </div>
+
+          {/* Server password */}
+          <div className="provider-field">
+            <label className="provider-label">Server password</label>
+            <input
+              className="settings-input"
+              type="password"
+              placeholder="Optional"
+              value={serverPassword}
+              onChange={(e) => setServerPassword(kind, e.target.value)}
+            />
+            <span className="provider-hint">Stored in plain text on disk.</span>
+          </div>
+
+          {/* Environment variables */}
+          <div className="provider-field">
+            <div className="provider-env-header">
+              <label className="provider-label">Environment variables</label>
+              <button className="settings-btn small" onClick={() => setAddingEnv(true)}>+ Add</button>
+            </div>
+            <span className="provider-hint">Add variables to pass API keys, base URLs, or other per-instance CLI settings.</span>
+            <div className="provider-env-list">
+              {Object.entries(providerEnv).map(([k, v]) => (
+                <div key={k} className="provider-env-item">
+                  <span className="provider-env-key">{k}</span>
+                  <span className="provider-env-sep">=</span>
+                  <span className="provider-env-val">{v}</span>
+                  <button className="provider-env-remove" onClick={() => removeEnvVar(kind, k)} title="Remove">×</button>
+                </div>
+              ))}
+              {addingEnv && (
+                <div className="provider-env-add">
+                  <input className="settings-input" placeholder="KEY" value={newEnvKey} onChange={(e) => setNewEnvKey(e.target.value)} autoFocus />
+                  <input className="settings-input" placeholder="value" value={newEnvValue} onChange={(e) => setNewEnvValue(e.target.value)} />
+                  <button
+                    className="settings-btn"
+                    disabled={!newEnvKey.trim()}
+                    onClick={() => {
+                      setEnvVar(kind, newEnvKey.trim(), newEnvValue);
+                      setNewEnvKey('');
+                      setNewEnvValue('');
+                      setAddingEnv(false);
+                    }}
+                  >
+                    Add
+                  </button>
+                  <button className="settings-btn ghost" onClick={() => { setAddingEnv(false); setNewEnvKey(''); setNewEnvValue(''); }}>Cancel</button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Auth instructions */}
@@ -209,17 +346,12 @@ function ProviderCard({
                   const meta = modelMeta[`${kind}:${model}`] ?? {};
                   const isFav = meta.favorite ?? false;
                   const isHidden = meta.hidden ?? false;
-                  const hasReasoning = meta.reasoning ?? false;
                   if (isHidden) return null;
                   return (
                     <div key={model} className="provider-model-row">
                       <div className="provider-model-left">
+                        <span className="provider-model-info-icon" title="Model">○</span>
                         <span className="provider-model-name">{model}</span>
-                        {hasReasoning && (
-                          <span className="provider-model-info" title="Supports reasoning">
-                            <InfoCircle /> Reasoning
-                          </span>
-                        )}
                       </div>
                       <div className="provider-model-actions">
                         <StarBtn active={isFav} onClick={() => setModelMeta(`${kind}:${model}`, { favorite: !isFav })} />
@@ -247,7 +379,7 @@ function ProviderCard({
               {/* Add model */}
               <div className="provider-model-add">
                 <input className="settings-input" placeholder="model-name" value={newModel} onChange={(e) => setNewModel(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newModel.trim()) { setNewModel(''); } }} />
-                <button className="settings-btn" onClick={() => { if (newModel.trim()) setNewModel(''); }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="M12 5v14"/></svg><span>Add</span></button>
+                <button className="settings-btn" onClick={() => { if (newModel.trim()) setNewModel(''); }}>+ Add</button>
               </div>
             </div>
           )}

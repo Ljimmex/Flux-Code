@@ -1,8 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
-import { ArrowUp, Square, Bot, Lock, Check, Search, Copy } from './icons';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { ArrowUp, Square, Bot, Lock, Check, Search, Copy, Star, ChevronLeft, ChevronRight } from './icons';
+import {
+  CodexIcon, OllamaIcon, OpenCodeIcon, ClaudeIcon, KimiIcon, GeminiIcon,
+} from './icons';
 import logo from '../Fluxavatar.png';
 import type { Thread, Project } from '../App';
-import { useProviderStore } from '../stores/providerStore';
+import { useProviderStore, type ProviderDraft } from '../stores/providerStore';
 import type { ProviderKind } from '../types/provider';
 
 interface Props {
@@ -20,6 +23,153 @@ const ACCESS_LEVELS = [
 const VARIANTS = ['Low', 'Medium', 'High'] as const;
 const AGENTS = ['Build', 'Plan'] as const;
 
+// Model option definitions aligned with T3 Code
+const CODEX_EFFORTS = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+] as const;
+
+const CLAUDE_EFFORTS = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'medium-high', label: 'High' },
+  { value: 'ultrathink', label: 'Ultrathink' },
+] as const;
+
+const PROVIDER_ORDER: ProviderKind[] = ['codex', 'claudeCode', 'opencode', 'ollama', 'kimi', 'gemini'];
+
+const PROVIDER_ICONS: Record<ProviderKind, React.ComponentType<{ size?: number; className?: string }>> = {
+  codex: CodexIcon,
+  claudeCode: ClaudeIcon,
+  opencode: OpenCodeIcon,
+  ollama: OllamaIcon,
+  kimi: KimiIcon,
+  gemini: GeminiIcon,
+};
+
+const PROVIDER_LABELS: Record<ProviderKind, string> = {
+  codex: 'Codex',
+  claudeCode: 'Claude',
+  opencode: 'OpenCode',
+  ollama: 'Ollama',
+  kimi: 'Kimi',
+  gemini: 'Gemini',
+};
+
+function getEnabledProviders(enabledProviders: Record<string, boolean>): ProviderKind[] {
+  return PROVIDER_ORDER.filter(k => enabledProviders[k]);
+}
+
+// ─── Model Options UI ───────────────────────────────────────────────────────
+
+function ModelOptionsLabel({
+  provider,
+  modelOptions,
+  agent,
+}: {
+  provider: ProviderKind;
+  modelOptions: ProviderDraft['modelOptions'];
+  agent: string;
+}) {
+  if (provider === 'codex') {
+    const opts = modelOptions as { effort?: string; fastMode?: boolean } | undefined;
+    const effort = opts?.effort ?? 'medium';
+    const fast = opts?.fastMode ? 'Fast' : null;
+    return <span>{effort}{fast ? ` · ${fast}` : ''} · {agent}</span>;
+  }
+  if (provider === 'claudeCode') {
+    const opts = modelOptions as { effort?: string; thinking?: boolean; fastMode?: boolean } | undefined;
+    const effort = opts?.effort ?? 'medium';
+    const tags = [effort];
+    if (opts?.thinking) tags.push('Think');
+    if (opts?.fastMode) tags.push('Fast');
+    return <span>{tags.join(' · ')} · {agent}</span>;
+  }
+  return <span>Medium · {agent}</span>;
+}
+
+function CodexOptions({
+  options,
+  onChange,
+}: {
+  options: ProviderDraft['modelOptions'];
+  onChange: (opts: ProviderDraft['modelOptions']) => void;
+}) {
+  const opts = (options as { effort?: string; fastMode?: boolean }) ?? {};
+  return (
+    <>
+      <div className="dropdown-section">
+        <div className="dropdown-section-label">Effort</div>
+        {CODEX_EFFORTS.map((e) => (
+          <button
+            key={e.value}
+            className={`toolbar-dropdown-item ${opts.effort === e.value ? 'active' : ''}`}
+            onClick={() => onChange({ ...opts, effort: e.value })}
+          >
+            <span>{e.label}</span>
+            {opts.effort === e.value && <Check size={14} />}
+          </button>
+        ))}
+      </div>
+      <div className="dropdown-section">
+        <div className="dropdown-section-label">Mode</div>
+        <button
+          className={`toolbar-dropdown-item ${opts.fastMode ? 'active' : ''}`}
+          onClick={() => onChange({ ...opts, fastMode: !opts.fastMode })}
+        >
+          <span>Fast mode</span>
+          {opts.fastMode && <Check size={14} />}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function ClaudeOptions({
+  options,
+  onChange,
+}: {
+  options: ProviderDraft['modelOptions'];
+  onChange: (opts: ProviderDraft['modelOptions']) => void;
+}) {
+  const opts = (options as { effort?: string; thinking?: boolean; fastMode?: boolean }) ?? {};
+  return (
+    <>
+      <div className="dropdown-section">
+        <div className="dropdown-section-label">Effort</div>
+        {CLAUDE_EFFORTS.map((e) => (
+          <button
+            key={e.value}
+            className={`toolbar-dropdown-item ${opts.effort === e.value ? 'active' : ''}`}
+            onClick={() => onChange({ ...opts, effort: e.value })}
+          >
+            <span>{e.label}</span>
+            {opts.effort === e.value && <Check size={14} />}
+          </button>
+        ))}
+      </div>
+      <div className="dropdown-section">
+        <div className="dropdown-section-label">Mode</div>
+        <button
+          className={`toolbar-dropdown-item ${opts.thinking ? 'active' : ''}`}
+          onClick={() => onChange({ ...opts, thinking: !opts.thinking })}
+        >
+          <span>Extended thinking</span>
+          {opts.thinking && <Check size={14} />}
+        </button>
+        <button
+          className={`toolbar-dropdown-item ${opts.fastMode ? 'active' : ''}`}
+          onClick={() => onChange({ ...opts, fastMode: !opts.fastMode })}
+        >
+          <span>Fast mode</span>
+          {opts.fastMode && <Check size={14} />}
+        </button>
+      </div>
+    </>
+  );
+}
+
 export default function ChatPanel({ activeThread, activeProject, onAddThread }: Props) {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
@@ -34,31 +184,125 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
   const [selectedAgent, setSelectedAgent] = useState('Build');
 
   const {
-    statuses, models: providerModels, enabledProviders,
+    models: providerModels, enabledProviders, modelMeta,
     activeProvider, activeModel,
-    setActiveProvider, setActiveModel,
+    providerDrafts,
+    envVars, serverUrls, serverPasswords,
+    setActiveProvider, setActiveModel, setModelMeta, setModelOptions,
     streamingContent: storeStreamingContent,
     isStreaming: storeIsStreaming,
     error: storeError,
     endStreaming, setError,
   } = useProviderStore();
 
+  // Helper to get current model options for active provider
+  const activeDraft = providerDrafts[activeProvider] ?? {};
+  const activeModelOptions = activeDraft.modelOptions ?? {};
+
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const generatingRef = useRef(false);
 
-  // Build flat model list from provider store (only enabled providers)
-  const allModels: { provider: ProviderKind; model: string; displayName: string }[] = [];
-  for (const [kind, list] of Object.entries(providerModels)) {
-    if (!enabledProviders[kind as ProviderKind]) continue;
-    for (const m of list) {
-      allModels.push({ provider: kind as ProviderKind, model: m, displayName: m });
+  // Dropdown state
+  const enabledProvidersList = useMemo(() => getEnabledProviders(enabledProviders), [enabledProviders]);
+  const [dropdownProvider, setDropdownProvider] = useState<ProviderKind>(activeProvider);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+
+  // Sync dropdown provider when it opens
+  useEffect(() => {
+    if (openDropdown === 'model') {
+      setDropdownProvider(activeProvider);
+      setHighlightedIndex(0);
+      setModelSearch('');
+      setTimeout(() => searchInputRef.current?.focus(), 0);
+    }
+  }, [openDropdown, activeProvider]);
+
+  const currentModels = useMemo(() => {
+    const list = providerModels[dropdownProvider] ?? [];
+    if (!modelSearch) return list;
+    return list.filter(m => m.toLowerCase().includes(modelSearch.toLowerCase()));
+  }, [providerModels, dropdownProvider, modelSearch]);
+
+  const allModelsFlat: { provider: ProviderKind; model: string }[] = [];
+  for (const kind of enabledProvidersList) {
+    for (const m of (providerModels[kind] ?? [])) {
+      allModelsFlat.push({ provider: kind, model: m });
     }
   }
 
-  const filteredModels = allModels.filter(m =>
-    m.model.toLowerCase().includes(modelSearch.toLowerCase()) ||
-    m.provider.toLowerCase().includes(modelSearch.toLowerCase())
-  );
+  // Global shortcuts: Ctrl+1..9 selects model by flat index
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!e.ctrlKey) return;
+      const num = parseInt(e.key, 10);
+      if (num >= 1 && num <= 9) {
+        e.preventDefault();
+        const idx = num - 1;
+        const entry = allModelsFlat[idx];
+        if (entry) {
+          setActiveProvider(entry.provider);
+          setActiveModel(entry.model);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [allModelsFlat, setActiveProvider, setActiveModel]);
+
+  // Keyboard navigation inside model dropdown
+  useEffect(() => {
+    if (openDropdown !== 'model') return;
+    const handler = (e: KeyboardEvent) => {
+      const providerIdx = enabledProvidersList.indexOf(dropdownProvider);
+      switch (e.key) {
+        case 'ArrowLeft': {
+          e.preventDefault();
+          const prev = enabledProvidersList[providerIdx - 1];
+          if (prev) {
+            setDropdownProvider(prev);
+            setHighlightedIndex(0);
+          }
+          break;
+        }
+        case 'ArrowRight': {
+          e.preventDefault();
+          const next = enabledProvidersList[providerIdx + 1];
+          if (next) {
+            setDropdownProvider(next);
+            setHighlightedIndex(0);
+          }
+          break;
+        }
+        case 'ArrowUp': {
+          e.preventDefault();
+          setHighlightedIndex(i => Math.max(0, i - 1));
+          break;
+        }
+        case 'ArrowDown': {
+          e.preventDefault();
+          setHighlightedIndex(i => Math.min(currentModels.length - 1, i + 1));
+          break;
+        }
+        case 'Enter': {
+          e.preventDefault();
+          const model = currentModels[highlightedIndex];
+          if (model) {
+            setActiveProvider(dropdownProvider);
+            setActiveModel(model);
+            setOpenDropdown(null);
+          }
+          break;
+        }
+        case 'Escape': {
+          setOpenDropdown(null);
+          break;
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [openDropdown, dropdownProvider, enabledProvidersList, currentModels, highlightedIndex, setActiveProvider, setActiveModel]);
 
   // Sync store streaming to local state
   useEffect(() => {
@@ -111,11 +355,18 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     setMessages(prev => [...prev, { role: 'user', content: text }]);
 
     try {
+      const runtimeMode = selectedAccess === 'full' ? 'full-access' : 'approval-required';
       await window.electronAPI.provider.startSession({
         threadId: activeThread.id,
         provider: activeProvider,
         model: activeModel,
         projectPath: activeProject?.path ?? '.',
+        runtimeMode,
+        modelOptions: activeModelOptions,
+        interactionMode: selectedAgent.toLowerCase() as 'default' | 'plan',
+        serverUrl: serverUrls[activeProvider] || undefined,
+        serverPassword: serverPasswords[activeProvider] || undefined,
+        env: envVars[activeProvider] || undefined,
       });
 
       const turnId = `turn_${Date.now()}`;
@@ -143,6 +394,14 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
       handleSend();
     }
   };
+
+  const toggleFavorite = (e: React.MouseEvent, provider: ProviderKind, model: string) => {
+    e.stopPropagation();
+    const meta = modelMeta[`${provider}:${model}`] ?? {};
+    setModelMeta(`${provider}:${model}`, { favorite: !meta.favorite });
+  };
+
+  const ActiveIcon = PROVIDER_ICONS[activeProvider];
 
   if (!activeProject) {
     return (
@@ -238,89 +497,147 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
                   className="toolbar-btn"
                   onClick={() => setOpenDropdown(openDropdown === 'model' ? null : 'model')}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18" />
-                  </svg>
-                  <span>{activeProvider} · {activeModel}</span>
+                  <ActiveIcon size={14} />
+                  <span>{PROVIDER_LABELS[activeProvider]} · {activeModel}</span>
                 </button>
 
                 {openDropdown === 'model' && (
                   <div className="toolbar-dropdown model-dropdown">
-                    <div className="model-dropdown-header">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
-                      <span>{activeProvider}</span>
+                    {/* Provider header with arrows */}
+                    <div className="model-dropdown-header-nav">
+                      <button
+                        className="model-nav-arrow"
+                        onClick={() => {
+                          const idx = enabledProvidersList.indexOf(dropdownProvider);
+                          const prev = enabledProvidersList[idx - 1];
+                          if (prev) { setDropdownProvider(prev); setHighlightedIndex(0); }
+                        }}
+                        disabled={enabledProvidersList.indexOf(dropdownProvider) <= 0}
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                      <div className="model-dropdown-header-title">
+                        <span className="provider-icon-small">
+                          {(() => {
+                            const Icon = PROVIDER_ICONS[dropdownProvider];
+                            return <Icon size={16} />;
+                          })()}
+                        </span>
+                        <span>{PROVIDER_LABELS[dropdownProvider]}</span>
+                      </div>
+                      <button
+                        className="model-nav-arrow"
+                        onClick={() => {
+                          const idx = enabledProvidersList.indexOf(dropdownProvider);
+                          const next = enabledProvidersList[idx + 1];
+                          if (next) { setDropdownProvider(next); setHighlightedIndex(0); }
+                        }}
+                        disabled={enabledProvidersList.indexOf(dropdownProvider) >= enabledProvidersList.length - 1}
+                      >
+                        <ChevronRight size={14} />
+                      </button>
                     </div>
+
+                    {/* Search */}
                     <div className="toolbar-dropdown-search">
                       <Search size={14} />
                       <input
-                        autoFocus
+                        ref={searchInputRef}
                         placeholder="Search models..."
                         value={modelSearch}
-                        onChange={(e) => setModelSearch(e.target.value)}
+                        onChange={(e) => { setModelSearch(e.target.value); setHighlightedIndex(0); }}
                       />
                     </div>
-                    {/* Provider list */}
-                    {(['codex', 'claude', 'opencode', 'ollama', 'kimi', 'gemini'] as ProviderKind[]).map(kind => {
-                      if (!enabledProviders[kind]) return null;
-                      const status = statuses[kind];
-                      const isReady = status?.kind === 'ready';
-                      const modelList = providerModels[kind] ?? [];
-                      if (!isReady || modelList.length === 0) return null;
-                      return (
-                        <div key={kind}>
-                          <div className="dropdown-section-label" style={{ textTransform: 'capitalize', padding: '6px 12px', fontSize: 11, color: 'var(--text-muted)' }}>{kind}</div>
-                          {modelList.map(m => (
-                            <button
-                              key={`${kind}:${m}`}
-                              className={`toolbar-dropdown-item ${activeProvider === kind && activeModel === m ? 'active' : ''}`}
-                              onClick={() => {
-                                setActiveProvider(kind);
-                                setActiveModel(m);
-                                setOpenDropdown(null);
-                                setModelSearch('');
-                              }}
+
+                    {/* Models list */}
+                    <div className="model-dropdown-models">
+                      {currentModels.map((m, idx) => {
+                        const meta = modelMeta[`${dropdownProvider}:${m}`] ?? {};
+                        const isFav = meta.favorite ?? false;
+                        const isActive = activeProvider === dropdownProvider && activeModel === m;
+                        const isHighlighted = idx === highlightedIndex;
+                        const shortcutLabel = idx < 9 ? `Ctrl+${idx + 1}` : '';
+                        return (
+                          <button
+                            key={m}
+                            className={`toolbar-dropdown-item model-item ${isActive ? 'active' : ''} ${isHighlighted ? 'highlighted' : ''}`}
+                            onClick={() => {
+                              setActiveProvider(dropdownProvider);
+                              setActiveModel(m);
+                              setOpenDropdown(null);
+                              setModelSearch('');
+                            }}
+                            onMouseEnter={() => setHighlightedIndex(idx)}
+                          >
+                            <span
+                              className="model-star-btn"
+                              onClick={(e) => toggleFavorite(e, dropdownProvider, m)}
+                              title={isFav ? 'Unfavorite' : 'Favorite'}
                             >
-                              <span>{m}</span>
-                            </button>
-                          ))}
+                              <Star size={13} className={isFav ? 'star-filled' : 'star-empty'} />
+                            </span>
+                            <span className="model-item-name">{m}</span>
+                            {isActive && <Check size={14} />}
+                            {shortcutLabel && (
+                              <span className="model-shortcut">{shortcutLabel}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                      {currentModels.length === 0 && (
+                        <div className="toolbar-dropdown-item" style={{ color: 'var(--text-muted)' }}>
+                          <span>No models found.</span>
                         </div>
-                      );
-                    })}
-                    {filteredModels.length === 0 && (
-                      <div className="toolbar-dropdown-item" style={{ color: 'var(--text-muted)' }}>
-                        <span>No models available. Check provider status in Settings.</span>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
 
               <span className="toolbar-sep">|</span>
 
-              {/* Variant/Agent selector */}
+              {/* Model options + Agent selector */}
               <div className="toolbar-item-wrapper">
                 <button
                   className="toolbar-btn"
                   onClick={() => setOpenDropdown(openDropdown === 'variant' ? null : 'variant')}
                 >
-                  <span>{selectedVariant} · {selectedAgent}</span>
+                  <ModelOptionsLabel
+                    provider={activeProvider}
+                    modelOptions={activeModelOptions}
+                    agent={selectedAgent}
+                  />
                 </button>
 
                 {openDropdown === 'variant' && (
                   <div className="toolbar-dropdown variant-dropdown">
-                    <div className="dropdown-section">
-                      <div className="dropdown-section-label">Variant</div>
-                      {VARIANTS.map(v => (
-                        <button
-                          key={v}
-                          className={`toolbar-dropdown-item ${selectedVariant === v ? 'active' : ''}`}
-                          onClick={() => setSelectedVariant(v)}
-                        >
-                          <span>{v}</span>
-                          {selectedVariant === v && <Check size={14} />}
-                        </button>
-                      ))}
-                    </div>
+                    {activeProvider === 'codex' && (
+                      <CodexOptions
+                        options={(activeModelOptions as ProviderDraft['modelOptions']) ?? {}}
+                        onChange={(opts) => setModelOptions('codex', opts)}
+                      />
+                    )}
+                    {activeProvider === 'claudeCode' && (
+                      <ClaudeOptions
+                        options={(activeModelOptions as ProviderDraft['modelOptions']) ?? {}}
+                        onChange={(opts) => setModelOptions('claudeCode', opts)}
+                      />
+                    )}
+                    {activeProvider !== 'codex' && activeProvider !== 'claudeCode' && (
+                      <div className="dropdown-section">
+                        <div className="dropdown-section-label">Reasoning</div>
+                        {VARIANTS.map(v => (
+                          <button
+                            key={v}
+                            className={`toolbar-dropdown-item ${selectedVariant === v ? 'active' : ''}`}
+                            onClick={() => setSelectedVariant(v)}
+                          >
+                            <span>{v}</span>
+                            {selectedVariant === v && <Check size={14} />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <div className="dropdown-section">
                       <div className="dropdown-section-label">Agent</div>
                       {AGENTS.map(a => (

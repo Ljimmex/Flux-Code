@@ -1,129 +1,267 @@
 import { spawn, type ChildProcess } from 'child_process';
 import { createInterface } from 'readline';
 import { execSync } from 'child_process';
-import type { ProviderAdapter } from '../ProviderAdapter';
+import type { ProviderAdapterShape } from '../ProviderAdapter';
 import type {
-  ProviderKind, ProviderRuntimeEvent, ProviderStatus,
-  SessionStartOpts, TurnSendOpts,
+  ProviderKind,
+  ProviderRuntimeEvent,
+  ProviderStatus,
+  ProviderSession,
+  ProviderSessionStartInput,
+  ProviderSendTurnInput,
+  ProviderTurnStartResult,
+  ProviderThreadSnapshot,
+  ProviderApprovalDecision,
+  ProviderUserInputAnswers,
 } from '../types';
-
-const MODELS = ['kimi-k2.6', 'claude-opus-4', 'gpt-4o'];
+import { generateEventId, generateTurnId } from '../types';
+import {
+  type OpenCodeModel,
+  checkOpenCodeVersion,
+  fetchOpenCodeModels,
+  getCliVersion,
+} from '../../model';
 
 /**
  * OpenCode adapter.
  * Spawns `opencode` CLI subprocess.
+ * Models are fetched dynamically via `opencode models --json`.
  */
-export class OpenCodeAdapter implements ProviderAdapter {
-  readonly kind: ProviderKind = 'opencode';
+export class OpenCodeAdapter implements ProviderAdapterShape {
+  readonly provider: ProviderKind = 'opencode';
+  readonly capabilities = { sessionModelSwitch: 'in-session' as const };
   binaryPath = 'opencode';
 
-  setBinaryPath(path: string) {
-    this.binaryPath = path || 'opencode';
-  }
-
-  private sessions = new Map<string, {
+  private sessions = new Map<number, {
     process: ChildProcess;
     turnId: string | null;
     abortCtrl: AbortController;
   }>();
 
   private eventHandlers = new Set<(event: ProviderRuntimeEvent) => void>();
+  private modelCache: OpenCodeModel[] | null = null;
 
-  async probe(): Promise<ProviderStatus> {
-    try {
-      const opts = { timeout: 5000, stdio: 'ignore' as const };
-      if (process.platform === 'win32') (opts as any).shell = true;
-      execSync(`${this.binaryPath} --version`, opts);
-    } catch {
-      return { kind: 'not-installed' };
-    }
-
-    // OpenCode auth is provider-side (API keys in provider config).
-    // If the CLI is installed, treat it as ready.
-    return { kind: 'ready', models: MODELS };
+  setBinaryPath(path: string) {
+    this.binaryPath = path || 'opencode';
   }
 
-  async startSession(opts: SessionStartOpts): Promise<void> {
-    this.emit({ type: 'session.starting', sessionId: opts.sessionId });
+  async probe(): Promise<ProviderStatus> {
+    const version = getCliVersion(this.binaryPath);
+    const versionCheck = checkOpenCodeVersion(this.binaryPath);
+    if (!versionCheck.ok) {
+      if (versionCheck.reason === 'not_installed') {
+        return { kind: 'not-installed', version };
+      }
+      return {
+        kind: 'error',
+        message: versionCheck.reason === 'version_too_old'
+          ? `OpenCode ${versionCheck.version} is too old. Minimum: 1.14.19`
+          : 'Unknown OpenCode version error',
+        version,
+      };
+    }
 
+    // Fetch dynamic models
+    const models = await fetchOpenCodeModels(this.binaryPath);
+    this.modelCache = models;
+    if (models.length === 0) {
+      return { kind: 'ready', models: [], version };
+    }
+    return { kind: 'ready', models: models.map((m) => m.id), version };
+  }
+
+  async startSession(input: ProviderSessionStartInput): Promise<ProviderSession> {
+    const now = new Date().toISOString();
+
+    this.emit({
+      id: generateEventId(),
+      kind: 'session',
+      provider: 'opencode',
+      threadId: input.threadId,
+      createdAt: now,
+      method: 'session/connecting',
+    });
+
+    const extraEnv = input.providerOptions?.opencode?.env;
     const proc = spawn(this.binaryPath, [], {
-      cwd: opts.projectPath,
+      cwd: input.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' },
+      env: { ...process.env, ...(extraEnv ?? {}), FORCE_COLOR: '0', NO_COLOR: '1' },
     });
 
     const abortCtrl = new AbortController();
-    this.sessions.set(opts.sessionId, { process: proc, turnId: null, abortCtrl });
+    this.sessions.set(input.threadId, { process: proc, turnId: null, abortCtrl });
 
     const rl = createInterface({ input: proc.stdout! });
     rl.on('line', (line) => {
-      const session = this.sessions.get(opts.sessionId);
+      const session = this.sessions.get(input.threadId);
       if (session?.turnId && line.trim()) {
-        this.emit({ type: 'content.delta', sessionId: opts.sessionId, turnId: session.turnId, text: line + '\n' });
+        this.emit({
+          id: generateEventId(),
+          kind: 'notification',
+          provider: 'opencode',
+          threadId: input.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'item/agentMessage/delta',
+          turnId: session.turnId,
+          textDelta: line + '\n',
+        });
       }
     });
 
     proc.stderr?.on('data', (data) => {
       const text = data.toString();
       if (text.includes('error') || text.includes('Error')) {
-        this.emit({ type: 'session.error', sessionId: opts.sessionId, message: text.trim() });
+        this.emit({
+          id: generateEventId(),
+          kind: 'error',
+          provider: 'opencode',
+          threadId: input.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'error/session',
+          message: text.trim(),
+        });
       }
     });
 
     proc.on('error', (err) => {
-      this.emit({ type: 'session.error', sessionId: opts.sessionId, message: err.message });
+      this.emit({
+        id: generateEventId(),
+        kind: 'error',
+        provider: 'opencode',
+        threadId: input.threadId,
+        createdAt: new Date().toISOString(),
+        method: 'error/session',
+        message: err.message,
+      });
     });
 
     proc.on('exit', (code) => {
       if (code !== 0 && code !== null) {
-        this.emit({ type: 'session.error', sessionId: opts.sessionId, message: `OpenCode exited with code ${code}` });
+        this.emit({
+          id: generateEventId(),
+          kind: 'error',
+          provider: 'opencode',
+          threadId: input.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'error/session',
+          message: `OpenCode exited with code ${code}`,
+        });
       }
-      this.sessions.delete(opts.sessionId);
+      this.sessions.delete(input.threadId);
     });
 
-    this.emit({ type: 'session.ready', sessionId: opts.sessionId });
+    return {
+      provider: 'opencode',
+      status: 'ready',
+      runtimeMode: input.runtimeMode,
+      threadId: input.threadId,
+      model: input.model,
+      cwd: input.cwd,
+      resumeCursor: input.resumeCursor,
+      createdAt: now,
+      updatedAt: now,
+    };
   }
 
-  async resumeSession(opts: SessionStartOpts): Promise<void> {
-    await this.startSession(opts);
+  async stopSession(threadId: number): Promise<void> {
+    const session = this.sessions.get(threadId);
+    if (!session) return;
+    session.process.kill('SIGTERM');
+    this.sessions.delete(threadId);
+    this.emit({
+      id: generateEventId(),
+      kind: 'session',
+      provider: 'opencode',
+      threadId,
+      createdAt: new Date().toISOString(),
+      method: 'session/closed',
+    });
   }
 
-  async sendTurn(opts: TurnSendOpts): Promise<void> {
-    const session = this.sessions.get(opts.sessionId);
-    if (!session) throw new Error(`Session ${opts.sessionId} not found`);
+  async stopAll(): Promise<void> {
+    for (const threadId of Array.from(this.sessions.keys())) {
+      await this.stopSession(threadId);
+    }
+  }
 
-    session.turnId = opts.turnId;
-    this.emit({ type: 'turn.started', sessionId: opts.sessionId, turnId: opts.turnId });
+  async sendTurn(input: ProviderSendTurnInput): Promise<ProviderTurnStartResult> {
+    const session = this.sessions.get(input.threadId);
+    if (!session) throw new Error(`Session for thread ${input.threadId} not found`);
 
-    const prompt = opts.prompt + '\n';
+    const turnId = generateTurnId();
+    session.turnId = turnId;
+
+    this.emit({
+      id: generateEventId(),
+      kind: 'notification',
+      provider: 'opencode',
+      threadId: input.threadId,
+      createdAt: new Date().toISOString(),
+      method: 'turn/started',
+      turnId,
+    });
+
+    const prompt = (input.input ?? '') + '\n';
     session.process.stdin!.write(prompt);
 
     setTimeout(() => {
-      if (session.turnId === opts.turnId) {
-        this.emit({ type: 'turn.completed', sessionId: opts.sessionId, turnId: opts.turnId });
+      if (session.turnId === turnId) {
+        this.emit({
+          id: generateEventId(),
+          kind: 'notification',
+          provider: 'opencode',
+          threadId: input.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'turn/completed',
+          turnId,
+        });
         session.turnId = null;
       }
     }, 100);
+
+    return { turnId };
   }
 
-  async interruptTurn(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
+  async interruptTurn(threadId: number, _turnId?: string): Promise<void> {
+    const session = this.sessions.get(threadId);
     if (!session) return;
     session.process.kill('SIGINT');
   }
 
-  async respondToApproval(sessionId: string, _requestId: string, approved: boolean): Promise<void> {
-    const session = this.sessions.get(sessionId);
+  async respondToRequest(threadId: number, _requestId: string, decision: ProviderApprovalDecision): Promise<void> {
+    const session = this.sessions.get(threadId);
     if (!session) return;
-    session.process.stdin!.write(approved ? 'y\n' : 'n\n');
+    session.process.stdin!.write(decision === 'allow' ? 'y\n' : 'n\n');
   }
 
-  async stopSession(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-    session.process.kill('SIGTERM');
-    this.sessions.delete(sessionId);
-    this.emit({ type: 'session.stopped', sessionId });
+  async respondToUserInput(_threadId: number, _requestId: string, _answers: ProviderUserInputAnswers): Promise<void> {
+    // Not supported in simplified CLI adapter
+  }
+
+  async readThread(_threadId: number): Promise<ProviderThreadSnapshot> {
+    return { turns: [] };
+  }
+
+  async rollbackThread(_threadId: number, _numTurns: number): Promise<ProviderThreadSnapshot> {
+    return { turns: [] };
+  }
+
+  async listSessions(): Promise<readonly ProviderSession[]> {
+    const now = new Date().toISOString();
+    return Array.from(this.sessions.entries()).map(([threadId, s]) => ({
+      provider: 'opencode' as const,
+      status: 'ready' as const,
+      runtimeMode: 'approval-required' as const,
+      threadId,
+      activeTurnId: s.turnId ?? undefined,
+      createdAt: now,
+      updatedAt: now,
+    }));
+  }
+
+  async hasSession(threadId: number): Promise<boolean> {
+    return this.sessions.has(threadId);
   }
 
   onEvent(handler: (event: ProviderRuntimeEvent) => void): () => void {
@@ -132,6 +270,12 @@ export class OpenCodeAdapter implements ProviderAdapter {
   }
 
   private emit(event: ProviderRuntimeEvent) {
-    this.eventHandlers.forEach((h) => h(event));
+    for (const h of this.eventHandlers) {
+      try {
+        h(event);
+      } catch {
+        // ignore
+      }
+    }
   }
 }

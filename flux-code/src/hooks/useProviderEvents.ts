@@ -3,6 +3,7 @@ import { useProviderStore } from '../stores/providerStore';
 
 /**
  * Listen to provider IPC events and update the Zustand store.
+ * Aligned with T3 Code ProviderRuntimeEvent schema.
  * Mount once in the root component (App.tsx).
  */
 export function useProviderEvents() {
@@ -22,22 +23,30 @@ export function useProviderEvents() {
     });
 
     const unsubEvent = window.electronAPI.onProviderEvent((event) => {
-      switch (event.type) {
-        case 'content.delta':
-          appendStreamChunk(event.turnId, event.text);
-          break;
-        case 'turn.completed':
-          endStreaming();
-          break;
-        case 'turn.error':
-          endStreaming();
-          setError(event.message);
-          setTimeout(() => setError(null), 5000);
-          break;
-        case 'session.error':
-          setError(event.message);
-          setTimeout(() => setError(null), 5000);
-          break;
+      // T3 Code event schema: event.kind + event.method
+      if (event.kind === 'notification' && event.method === 'item/agentMessage/delta') {
+        if (event.turnId && event.textDelta) {
+          appendStreamChunk(event.turnId, event.textDelta);
+        }
+        return;
+      }
+
+      if (event.kind === 'notification' && event.method === 'turn/completed') {
+        endStreaming();
+        return;
+      }
+
+      if (event.kind === 'error' && event.method === 'error/turn') {
+        endStreaming();
+        setError(event.message ?? 'Turn error');
+        setTimeout(() => setError(null), 5000);
+        return;
+      }
+
+      if (event.kind === 'error' && event.method === 'error/session') {
+        setError(event.message ?? 'Session error');
+        setTimeout(() => setError(null), 5000);
+        return;
       }
     });
 

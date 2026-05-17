@@ -1,10 +1,19 @@
-import type { ProviderAdapter } from '../ProviderAdapter';
+import type { ProviderAdapterShape } from '../ProviderAdapter';
 import type {
-  ProviderKind, ProviderRuntimeEvent, ProviderStatus,
-  SessionStartOpts, TurnSendOpts,
+  ProviderKind,
+  ProviderRuntimeEvent,
+  ProviderStatus,
+  ProviderSession,
+  ProviderSessionStartInput,
+  ProviderSendTurnInput,
+  ProviderTurnStartResult,
+  ProviderThreadSnapshot,
+  ProviderApprovalDecision,
+  ProviderUserInputAnswers,
 } from '../types';
+import { generateEventId, generateTurnId } from '../types';
 
-const KIMI_BASE_URL = 'https://api.moonshot.ai/v1';
+const KIMI_DEFAULT_URL = 'https://api.moonshot.ai/v1';
 
 interface SessionState {
   model: string;
@@ -12,22 +21,23 @@ interface SessionState {
   history: Array<{ role: string; content: string }>;
   abortCtrl: AbortController;
   turnId: string | null;
+  baseUrl: string;
 }
 
 /**
  * Kimi (Moonshot AI) adapter.
  * Uses REST API with OpenAI-compatible format.
- * API key stored locally in ~/.config/kimi/auth.json or env var.
  */
-export class KimiAdapter implements ProviderAdapter {
-  readonly kind: ProviderKind = 'kimi';
+export class KimiAdapter implements ProviderAdapterShape {
+  readonly provider: ProviderKind = 'kimi';
+  readonly capabilities = { sessionModelSwitch: 'in-session' as const };
   binaryPath = 'kimi-cli';
 
   setBinaryPath(_path: string) {
     // Kimi uses REST API; binary path is not used for spawn.
   }
 
-  private sessions = new Map<string, SessionState>();
+  private sessions = new Map<number, SessionState>();
   private eventHandlers = new Set<(event: ProviderRuntimeEvent) => void>();
 
   async probe(): Promise<ProviderStatus> {
@@ -36,50 +46,106 @@ export class KimiAdapter implements ProviderAdapter {
     if (!apiKey) {
       return { kind: 'not-authenticated', installCmd: 'kimi-cli auth login', models: fallbackModels };
     }
-
-    // If we have an API key, assume ready. The actual validation happens at chat time.
     return { kind: 'ready', models: fallbackModels };
   }
 
-  async startSession(opts: SessionStartOpts): Promise<void> {
-    this.emit({ type: 'session.starting', sessionId: opts.sessionId });
-    this.sessions.set(opts.sessionId, {
-      model: opts.model,
-      projectPath: opts.projectPath,
-      history: opts.systemPrompt ? [{ role: 'system', content: opts.systemPrompt }] : [],
+  async startSession(input: ProviderSessionStartInput): Promise<ProviderSession> {
+    const now = new Date().toISOString();
+
+    this.emit({
+      id: generateEventId(),
+      kind: 'session',
+      provider: 'kimi',
+      threadId: input.threadId,
+      createdAt: now,
+      method: 'session/connecting',
+    });
+
+    const baseUrl = input.providerOptions?.kimi?.serverUrl ?? KIMI_DEFAULT_URL;
+    this.sessions.set(input.threadId, {
+      model: input.model ?? 'kimi-k2.6',
+      projectPath: input.cwd ?? '',
+      history: input.systemPrompt ? [{ role: 'system', content: input.systemPrompt }] : [],
       abortCtrl: new AbortController(),
       turnId: null,
+      baseUrl,
     });
-    this.emit({ type: 'session.ready', sessionId: opts.sessionId });
+
+    return {
+      provider: 'kimi',
+      status: 'ready',
+      runtimeMode: input.runtimeMode,
+      threadId: input.threadId,
+      model: input.model,
+      cwd: input.cwd,
+      resumeCursor: input.resumeCursor,
+      createdAt: now,
+      updatedAt: now,
+    };
   }
 
-  async resumeSession(opts: SessionStartOpts): Promise<void> {
-    await this.startSession(opts);
+  async stopSession(threadId: number): Promise<void> {
+    const session = this.sessions.get(threadId);
+    if (!session) return;
+    session.abortCtrl.abort();
+    this.sessions.delete(threadId);
+    this.emit({
+      id: generateEventId(),
+      kind: 'session',
+      provider: 'kimi',
+      threadId,
+      createdAt: new Date().toISOString(),
+      method: 'session/closed',
+    });
   }
 
-  async sendTurn(opts: TurnSendOpts): Promise<void> {
-    const session = this.sessions.get(opts.sessionId);
-    if (!session) throw new Error(`Session ${opts.sessionId} not found`);
+  async stopAll(): Promise<void> {
+    for (const threadId of Array.from(this.sessions.keys())) {
+      await this.stopSession(threadId);
+    }
+  }
+
+  async sendTurn(input: ProviderSendTurnInput): Promise<ProviderTurnStartResult> {
+    const session = this.sessions.get(input.threadId);
+    if (!session) throw new Error(`Session for thread ${input.threadId} not found`);
 
     const apiKey = this.readApiKey();
     if (!apiKey) {
-      this.emit({ type: 'turn.error', sessionId: opts.sessionId, turnId: opts.turnId, message: 'No Kimi API key configured' });
-      return;
+      this.emit({
+        id: generateEventId(),
+        kind: 'error',
+        provider: 'kimi',
+        threadId: input.threadId,
+        createdAt: new Date().toISOString(),
+        method: 'error/turn',
+        message: 'No Kimi API key configured',
+      });
+      return { turnId: generateTurnId() };
     }
 
-    session.turnId = opts.turnId;
-    this.emit({ type: 'turn.started', sessionId: opts.sessionId, turnId: opts.turnId });
+    const turnId = generateTurnId();
+    session.turnId = turnId;
 
-    let fullPrompt = opts.prompt;
-    if (opts.contextFiles?.length) {
-      const fileContents = await this.readFiles(opts.contextFiles);
-      fullPrompt = `${fileContents}\n\n---\n\n${opts.prompt}`;
+    this.emit({
+      id: generateEventId(),
+      kind: 'notification',
+      provider: 'kimi',
+      threadId: input.threadId,
+      createdAt: new Date().toISOString(),
+      method: 'turn/started',
+      turnId,
+    });
+
+    let fullPrompt = input.input ?? '';
+    if (input.attachments?.length) {
+      const fileContents = await this.readFiles(input.attachments.map((a) => a.path));
+      fullPrompt = `${fileContents}\n\n---\n\n${fullPrompt}`;
     }
 
     session.history.push({ role: 'user', content: fullPrompt });
 
     try {
-      const res = await fetch(`${KIMI_BASE_URL}/chat/completions`, {
+      const res = await fetch(`${session.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -119,39 +185,105 @@ export class KimiAdapter implements ProviderAdapter {
             const token = parsed.choices?.[0]?.delta?.content || '';
             if (token) {
               fullContent += token;
-              this.emit({ type: 'content.delta', sessionId: opts.sessionId, turnId: opts.turnId, text: token });
+              this.emit({
+                id: generateEventId(),
+                kind: 'notification',
+                provider: 'kimi',
+                threadId: input.threadId,
+                createdAt: new Date().toISOString(),
+                method: 'item/agentMessage/delta',
+                turnId,
+                textDelta: token,
+              });
             }
           } catch { /* ignore malformed */ }
         }
       }
 
       session.history.push({ role: 'assistant', content: fullContent });
-      this.emit({ type: 'turn.completed', sessionId: opts.sessionId, turnId: opts.turnId });
+      this.emit({
+        id: generateEventId(),
+        kind: 'notification',
+        provider: 'kimi',
+        threadId: input.threadId,
+        createdAt: new Date().toISOString(),
+        method: 'turn/completed',
+        turnId,
+      });
     } catch (err: any) {
-      if (err.name === 'AbortError') return;
-      this.emit({ type: 'turn.error', sessionId: opts.sessionId, turnId: opts.turnId, message: err.message || 'Unknown Kimi error' });
+      if (err.name === 'AbortError') {
+        session.turnId = null;
+        return { turnId };
+      }
+      this.emit({
+        id: generateEventId(),
+        kind: 'error',
+        provider: 'kimi',
+        threadId: input.threadId,
+        createdAt: new Date().toISOString(),
+        method: 'error/turn',
+        turnId,
+        message: err.message || 'Unknown Kimi error',
+      });
     } finally {
       session.turnId = null;
     }
+
+    return { turnId };
   }
 
-  async interruptTurn(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
+  async interruptTurn(threadId: number, _turnId?: string): Promise<void> {
+    const session = this.sessions.get(threadId);
     if (!session) return;
     session.abortCtrl.abort();
     session.abortCtrl = new AbortController();
   }
 
-  async respondToApproval(): Promise<void> {
+  async respondToRequest(_threadId: number, _requestId: string, _decision: ProviderApprovalDecision): Promise<void> {
     // Kimi doesn't have approvals
   }
 
-  async stopSession(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-    session.abortCtrl.abort();
-    this.sessions.delete(sessionId);
-    this.emit({ type: 'session.stopped', sessionId });
+  async respondToUserInput(_threadId: number, _requestId: string, _answers: ProviderUserInputAnswers): Promise<void> {
+    // Kimi doesn't have user-input requests
+  }
+
+  async readThread(threadId: number): Promise<ProviderThreadSnapshot> {
+    const session = this.sessions.get(threadId);
+    if (!session) return { turns: [] };
+    return {
+      turns: session.history.map((m, i) => ({
+        turnId: `turn-${i}`,
+        role: m.role as any,
+        content: m.content,
+        createdAt: new Date().toISOString(),
+      })),
+    };
+  }
+
+  async rollbackThread(threadId: number, numTurns: number): Promise<ProviderThreadSnapshot> {
+    const session = this.sessions.get(threadId);
+    if (!session) return { turns: [] };
+    const removeCount = numTurns * 2;
+    session.history = session.history.slice(0, Math.max(1, session.history.length - removeCount));
+    return this.readThread(threadId);
+  }
+
+  async listSessions(): Promise<readonly ProviderSession[]> {
+    const now = new Date().toISOString();
+    return Array.from(this.sessions.entries()).map(([threadId, s]) => ({
+      provider: 'kimi' as const,
+      status: 'ready' as const,
+      runtimeMode: 'full-access' as const,
+      threadId,
+      model: s.model,
+      activeTurnId: s.turnId ?? undefined,
+      createdAt: now,
+      updatedAt: now,
+    }));
+  }
+
+  async hasSession(threadId: number): Promise<boolean> {
+    return this.sessions.has(threadId);
   }
 
   onEvent(handler: (event: ProviderRuntimeEvent) => void): () => void {
@@ -160,7 +292,13 @@ export class KimiAdapter implements ProviderAdapter {
   }
 
   private emit(event: ProviderRuntimeEvent) {
-    this.eventHandlers.forEach((h) => h(event));
+    for (const h of this.eventHandlers) {
+      try {
+        h(event);
+      } catch {
+        // ignore
+      }
+    }
   }
 
   private readApiKey(): string | null {

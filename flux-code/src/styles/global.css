@@ -1341,38 +1341,53 @@ textarea {
 
 /* Model dropdown */
 .model-dropdown {
-  min-width: 300px;
+  min-width: 320px;
   padding: 10px;
 }
 
-.model-fav-star {
+/* Model dropdown header with nav arrows */
+.model-dropdown-header-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0 10px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 8px;
+}
+
+.model-nav-arrow {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: color 0.15s;
-  flex-shrink: 0;
+  transition: all 0.15s;
 }
 
-.model-fav-star:hover {
-  color: var(--warning);
+.model-nav-arrow:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
-.model-fav-star.fav {
-  color: var(--warning);
+.model-nav-arrow:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
-.model-dropdown-header {
+.model-dropdown-header-title {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 6px 10px;
+  gap: 8px;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.provider-icon-small svg {
+  border-radius: 4px;
 }
 
 .toolbar-dropdown-search {
@@ -1402,6 +1417,65 @@ textarea {
 
 .toolbar-dropdown-search input::placeholder {
   color: var(--text-muted);
+}
+
+/* Model dropdown model list */
+.model-dropdown-models {
+  display: flex;
+  flex-direction: column;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.model-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.model-item.highlighted {
+  background: rgba(255,255,255,0.06);
+}
+
+.model-item-name {
+  flex: 1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-star-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.model-star-btn:hover {
+  color: var(--warning);
+}
+
+.model-star-btn .star-filled {
+  color: var(--warning);
+}
+
+.model-star-btn .star-empty {
+  color: var(--text-muted);
+}
+
+.model-shortcut {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
 }
 
 /* Access dropdown */
@@ -2809,6 +2883,42 @@ textarea {
   color: var(--text-muted);
 }
 
+.provider-version {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.provider-env-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.provider-model-info-icon {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-right: 6px;
+  user-select: none;
+}
+
+.settings-btn.small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.settings-btn.ghost {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.settings-btn.ghost:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
 .provider-actions {
   display: flex;
   align-items: center;
@@ -2911,6 +3021,35 @@ textarea {
 .provider-color-dot.active {
   border-color: var(--text-primary);
   box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 0 4px var(--text-primary);
+}
+
+.provider-color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.provider-color-row .settings-input {
+  flex: 1;
+}
+
+.provider-color-input {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: none;
+}
+
+.provider-color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.provider-color-input::-webkit-color-swatch {
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-sm);
 }
 
 /* Provider env vars */

@@ -1,151 +1,177 @@
-import { spawn, type ChildProcess } from 'child_process';
-import { createInterface } from 'readline';
 import { execSync } from 'child_process';
-import type { ProviderAdapter } from '../ProviderAdapter';
+import type { ProviderAdapterShape } from '../ProviderAdapter';
+import { CodexAppServerManager } from '../codexAppServerManager';
 import type {
-  ProviderKind, ProviderRuntimeEvent, ProviderStatus,
-  SessionStartOpts, TurnSendOpts,
+  ProviderKind,
+  ProviderRuntimeEvent,
+  ProviderStatus,
+  ProviderSession,
+  ProviderSessionStartInput,
+  ProviderSendTurnInput,
+  ProviderTurnStartResult,
+  ProviderThreadSnapshot,
+  ProviderApprovalDecision,
+  ProviderUserInputAnswers,
 } from '../types';
+import { generateEventId } from '../types';
+import {
+  CODEX_MODELS,
+  CODEX_DEFAULT_MODEL,
+  type CodexAccountSnapshot,
+  type CodexModelOptions,
+  probeCodexAccount,
+  resolveCodexModelForAccount,
+  getCliVersion,
+} from '../../model';
 
-const MODELS = ['codex-1', 'o3', 'o4-mini'];
+const CODEX_MODEL_SLUGS = CODEX_MODELS.map((m) => m.slug);
 
 /**
- * Codex CLI adapter.
- * In the full T3 Code architecture this uses JSON-RPC over stdio.
- * For now we use a simplified approach: spawn codex as subprocess
- * and translate its output to ProviderRuntimeEvents.
+ * Codex CLI adapter — reference implementation using `codex app-server` JSON-RPC over stdio.
+ *
+ * Aligned with T3 Code CodexAdapter (section 10).
  */
-export class CodexAdapter implements ProviderAdapter {
-  readonly kind: ProviderKind = 'codex';
+export class CodexAdapter implements ProviderAdapterShape {
+  readonly provider: ProviderKind = 'codex';
+  readonly capabilities = { sessionModelSwitch: 'restart-session' as const };
   binaryPath = 'codex';
+
+  private manager = new CodexAppServerManager();
+  private eventHandlers = new Set<(event: ProviderRuntimeEvent) => void>();
+  private accountCache: CodexAccountSnapshot | null = null;
+
+  constructor() {
+    this.manager.onEvent((event) => this.emit(event));
+  }
 
   setBinaryPath(path: string) {
     this.binaryPath = path || 'codex';
+    this.manager.setBinaryPath(this.binaryPath);
   }
 
-  private sessions = new Map<string, {
-    process: ChildProcess;
-    turnId: string | null;
-    abortCtrl: AbortController;
-  }>();
-
-  private eventHandlers = new Set<(event: ProviderRuntimeEvent) => void>();
-
   async probe(): Promise<ProviderStatus> {
+    const version = getCliVersion(this.binaryPath);
     try {
-      const opts = { timeout: 5000, stdio: 'ignore' as const };
+      const opts = { timeout: 5_000, stdio: 'ignore' as const };
       if (process.platform === 'win32') (opts as any).shell = true;
       execSync(`${this.binaryPath} --version`, opts);
     } catch {
-      return { kind: 'not-installed', models: MODELS };
+      return { kind: 'not-installed', models: CODEX_MODEL_SLUGS, version };
     }
 
     try {
-      const opts = { timeout: 5000, stdio: 'ignore' as const };
+      const opts = { timeout: 5_000, stdio: 'ignore' as const };
       if (process.platform === 'win32') (opts as any).shell = true;
       execSync(`${this.binaryPath} auth status`, opts);
-      return { kind: 'ready', models: MODELS };
     } catch (err: any) {
-      // If "auth status" subcommand doesn't exist, assume the CLI is usable
       if (err.code === 'ENOENT' || (err.message && err.message.includes('auth status'))) {
-        return { kind: 'ready', models: MODELS };
+        // auth status may not exist in some versions — assume ready
+      } else {
+        return { kind: 'not-authenticated', installCmd: 'codex login', models: CODEX_MODEL_SLUGS, version };
       }
-      return { kind: 'not-authenticated', installCmd: 'codex login', models: MODELS };
     }
+
+    // Probe account to know Spark eligibility (best-effort)
+    this.accountCache = probeCodexAccount(this.binaryPath);
+
+    return { kind: 'ready', models: CODEX_MODEL_SLUGS, version };
   }
 
-  async startSession(opts: SessionStartOpts): Promise<void> {
-    this.emit({ type: 'session.starting', sessionId: opts.sessionId });
+  // ─── Sessions ─────────────────────────────────────────────────────────────
 
-    const proc = spawn(this.binaryPath, ['--model', opts.model], {
-      cwd: opts.projectPath,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' },
+  async startSession(input: ProviderSessionStartInput): Promise<ProviderSession> {
+    const account = this.accountCache ?? probeCodexAccount(this.binaryPath);
+    const resolvedModel = resolveCodexModelForAccount(input.model, account);
+
+    const modelOptions: CodexModelOptions = (input as any).modelOptions ?? {};
+
+    const homePath = input.providerOptions?.codex?.homePath;
+    if (homePath) this.manager.setHomePath(homePath);
+
+    const session = await this.manager.startSession({
+      ...input,
+      model: resolvedModel,
+      // Pass reasoning_effort and fast mode through collaboration_mode or similar
+      providerOptions: {
+        ...input.providerOptions,
+        codex: {
+          ...input.providerOptions?.codex,
+          // Adapter-specific overrides consumed by CodexAppServerManager
+          effort: modelOptions.effort ?? 'medium',
+          fastMode: modelOptions.fastMode ?? false,
+        },
+      },
     });
 
-    const abortCtrl = new AbortController();
-    this.sessions.set(opts.sessionId, { process: proc, turnId: null, abortCtrl });
-
-    const rl = createInterface({ input: proc.stdout! });
-    let buffer = '';
-
-    rl.on('line', (line) => {
-      buffer += line + '\n';
-      // Simple heuristic: if line looks like content, emit delta
-      if (line.trim() && !line.startsWith('>') && !line.startsWith('$')) {
-        const session = this.sessions.get(opts.sessionId);
-        if (session?.turnId) {
-          this.emit({ type: 'content.delta', sessionId: opts.sessionId, turnId: session.turnId, text: line + '\n' });
-        }
-      }
-    });
-
-    proc.stderr?.on('data', (data) => {
-      const text = data.toString();
-      if (text.includes('error') || text.includes('Error')) {
-        this.emit({ type: 'session.error', sessionId: opts.sessionId, message: text.trim() });
-      }
-    });
-
-    proc.on('error', (err) => {
-      this.emit({ type: 'session.error', sessionId: opts.sessionId, message: err.message });
-    });
-
-    proc.on('exit', (code) => {
-      if (code !== 0 && code !== null) {
-        this.emit({ type: 'session.error', sessionId: opts.sessionId, message: `Codex exited with code ${code}` });
-      }
-      this.sessions.delete(opts.sessionId);
-    });
-
-    this.emit({ type: 'session.ready', sessionId: opts.sessionId });
+    return session;
   }
 
-  async resumeSession(opts: SessionStartOpts): Promise<void> {
-    await this.startSession(opts);
+  async stopSession(threadId: number): Promise<void> {
+    return this.manager.stopSession(threadId);
   }
 
-  async sendTurn(opts: TurnSendOpts): Promise<void> {
-    const session = this.sessions.get(opts.sessionId);
-    if (!session) throw new Error(`Session ${opts.sessionId} not found`);
-
-    session.turnId = opts.turnId;
-    this.emit({ type: 'turn.started', sessionId: opts.sessionId, turnId: opts.turnId });
-
-    const prompt = opts.prompt + '\n';
-    session.process.stdin!.write(prompt);
-
-    // For a non-interactive CLI, we'd wait for completion signal.
-    // Since codex CLI is interactive, we simulate turn completion
-    // after a timeout or when we detect a prompt pattern.
-    // This is a simplified implementation.
-    setTimeout(() => {
-      if (session.turnId === opts.turnId) {
-        this.emit({ type: 'turn.completed', sessionId: opts.sessionId, turnId: opts.turnId });
-        session.turnId = null;
-      }
-    }, 100);
+  async stopAll(): Promise<void> {
+    return this.manager.stopAll();
   }
 
-  async interruptTurn(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-    session.process.kill('SIGINT');
+  // ─── Turns ────────────────────────────────────────────────────────────────
+
+  async sendTurn(input: ProviderSendTurnInput): Promise<ProviderTurnStartResult> {
+    return this.manager.sendTurn(input);
   }
 
-  async respondToApproval(sessionId: string, _requestId: string, approved: boolean): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-    session.process.stdin!.write(approved ? 'y\n' : 'n\n');
+  async interruptTurn(threadId: number, turnId?: string): Promise<void> {
+    return this.manager.interruptTurn(threadId, turnId);
   }
 
-  async stopSession(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-    session.process.kill('SIGTERM');
-    this.sessions.delete(sessionId);
-    this.emit({ type: 'session.stopped', sessionId });
+  // ─── Approvals / User Input ───────────────────────────────────────────────
+
+  async respondToRequest(
+    threadId: number,
+    requestId: string,
+    decision: ProviderApprovalDecision,
+  ): Promise<void> {
+    return this.manager.respondToRequest(threadId, requestId, decision);
   }
+
+  async respondToUserInput(
+    threadId: number,
+    requestId: string,
+    answers: ProviderUserInputAnswers,
+  ): Promise<void> {
+    return this.manager.respondToUserInput(threadId, requestId, answers);
+  }
+
+  // ─── Thread state ─────────────────────────────────────────────────────────
+
+  async readThread(threadId: number): Promise<ProviderThreadSnapshot> {
+    return this.manager.readThread(threadId);
+  }
+
+  async rollbackThread(threadId: number, numTurns: number): Promise<ProviderThreadSnapshot> {
+    return this.manager.rollbackThread(threadId, numTurns);
+  }
+
+  // ─── Session queries ──────────────────────────────────────────────────────
+
+  async listSessions(): Promise<readonly ProviderSession[]> {
+    const now = new Date().toISOString();
+    return this.manager.listContexts().map((c) => ({
+      provider: 'codex' as const,
+      status: 'ready' as const,
+      runtimeMode: 'approval-required' as const,
+      threadId: c.threadId,
+      resumeCursor: c.internalThreadId,
+      createdAt: now,
+      updatedAt: now,
+    }));
+  }
+
+  async hasSession(threadId: number): Promise<boolean> {
+    return this.manager.hasContext(threadId);
+  }
+
+  // ─── Events ───────────────────────────────────────────────────────────────
 
   onEvent(handler: (event: ProviderRuntimeEvent) => void): () => void {
     this.eventHandlers.add(handler);
@@ -153,6 +179,12 @@ export class CodexAdapter implements ProviderAdapter {
   }
 
   private emit(event: ProviderRuntimeEvent) {
-    this.eventHandlers.forEach((h) => h(event));
+    for (const h of this.eventHandlers) {
+      try {
+        h(event);
+      } catch {
+        // ignore
+      }
+    }
   }
 }

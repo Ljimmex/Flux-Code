@@ -5,6 +5,8 @@ import type { ProviderAdapterRegistry } from './ProviderAdapterRegistry';
 /**
  * Health service — probes each installed provider.
  * Dynamic model cache: each adapter's probe() returns actual models from CLI/API.
+ *
+ * Aligned with T3 Code ProviderHealth.
  */
 export class HealthService {
   private statuses = new Map<ProviderKind, ProviderStatus>();
@@ -40,14 +42,14 @@ export class HealthService {
 
   getAllModels(): Record<string, string[]> {
     const result: Record<string, string[]> = {};
-    for (const kind of this.registry.getKinds()) {
+    for (const kind of this.registry.listProviders()) {
       result[kind] = this.getModels(kind);
     }
     return result;
   }
 
   async probeOne(kind: ProviderKind): Promise<void> {
-    const adapter = this.registry.getAdapter(kind);
+    const adapter = this.registry.get(kind);
     try {
       const status = await adapter.probe();
       this.updateStatus(kind, status);
@@ -64,9 +66,9 @@ export class HealthService {
       this.registry.getAllAdapters().map(async (adapter) => {
         try {
           const status = await adapter.probe();
-          this.updateStatus(adapter.kind, status);
+          this.updateStatus(adapter.provider, status);
         } catch (err) {
-          this.updateStatus(adapter.kind, {
+          this.updateStatus(adapter.provider, {
             kind: 'error',
             message: err instanceof Error ? err.message : String(err),
           });
@@ -80,9 +82,10 @@ export class HealthService {
     this.statuses.set(kind, status);
 
     // Cache models from any status variant that provides them
-    const modelList = status.kind === 'ready'
-      ? status.models
-      : (status as any).models;
+    const modelList =
+      status.kind === 'ready'
+        ? status.models
+        : (status as any).models;
     if (Array.isArray(modelList) && modelList.length > 0) {
       const prevModels = this.modelCache.get(kind);
       this.modelCache.set(kind, modelList);

@@ -1,11 +1,19 @@
-import { type ChildProcess } from 'child_process';
-import type { ProviderAdapter } from '../ProviderAdapter';
+import type { ProviderAdapterShape } from '../ProviderAdapter';
 import type {
-  ProviderKind, ProviderRuntimeEvent, ProviderStatus,
-  SessionStartOpts, TurnSendOpts,
+  ProviderKind,
+  ProviderRuntimeEvent,
+  ProviderStatus,
+  ProviderSession,
+  ProviderSessionStartInput,
+  ProviderSendTurnInput,
+  ProviderTurnStartResult,
+  ProviderThreadSnapshot,
+  ProviderApprovalDecision,
+  ProviderUserInputAnswers,
 } from '../types';
+import { generateEventId, generateTurnId } from '../types';
 
-const OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
+const OLLAMA_DEFAULT_URL = 'http://127.0.0.1:11434';
 
 interface SessionState {
   model: string;
@@ -13,22 +21,28 @@ interface SessionState {
   history: Array<{ role: string; content: string }>;
   abortCtrl: AbortController;
   turnId: string | null;
+  baseUrl: string;
 }
 
-export class OllamaAdapter implements ProviderAdapter {
-  readonly kind: ProviderKind = 'ollama';
+/**
+ * Ollama adapter.
+ * Uses local HTTP server (not subprocess spawn for chat).
+ */
+export class OllamaAdapter implements ProviderAdapterShape {
+  readonly provider: ProviderKind = 'ollama';
+  readonly capabilities = { sessionModelSwitch: 'in-session' as const };
   binaryPath = 'ollama';
 
   setBinaryPath(_path: string) {
     // Ollama uses a local HTTP server; binary path is not used for spawn.
   }
 
-  private sessions = new Map<string, SessionState>();
+  private sessions = new Map<number, SessionState>();
   private eventHandlers = new Set<(event: ProviderRuntimeEvent) => void>();
 
   async probe(): Promise<ProviderStatus> {
     try {
-      const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { signal: AbortSignal.timeout(5000) });
+      const res = await fetch(`${OLLAMA_DEFAULT_URL}/api/tags`, { signal: AbortSignal.timeout(5000) });
       const data = await res.json() as { models?: Array<{ name: string; size: number }> };
       if (!Array.isArray(data.models) || data.models.length === 0) {
         return { kind: 'not-authenticated', installCmd: 'ollama pull llama3.3', models: ['llama3.3', 'llama3.2', 'mistral'] };
@@ -40,39 +54,89 @@ export class OllamaAdapter implements ProviderAdapter {
     }
   }
 
-  async startSession(opts: SessionStartOpts): Promise<void> {
-    this.emit({ type: 'session.starting', sessionId: opts.sessionId });
-    this.sessions.set(opts.sessionId, {
-      model: opts.model,
-      projectPath: opts.projectPath,
-      history: opts.systemPrompt ? [{ role: 'system', content: opts.systemPrompt }] : [],
+  async startSession(input: ProviderSessionStartInput): Promise<ProviderSession> {
+    const now = new Date().toISOString();
+
+    this.emit({
+      id: generateEventId(),
+      kind: 'session',
+      provider: 'ollama',
+      threadId: input.threadId,
+      createdAt: now,
+      method: 'session/connecting',
+    });
+
+    const baseUrl = input.providerOptions?.ollama?.serverUrl ?? OLLAMA_DEFAULT_URL;
+    this.sessions.set(input.threadId, {
+      model: input.model ?? 'llama3.3',
+      projectPath: input.cwd ?? '',
+      history: input.systemPrompt ? [{ role: 'system', content: input.systemPrompt }] : [],
       abortCtrl: new AbortController(),
       turnId: null,
+      baseUrl,
     });
-    this.emit({ type: 'session.ready', sessionId: opts.sessionId });
+
+    return {
+      provider: 'ollama',
+      status: 'ready',
+      runtimeMode: input.runtimeMode,
+      threadId: input.threadId,
+      model: input.model,
+      cwd: input.cwd,
+      resumeCursor: input.resumeCursor,
+      createdAt: now,
+      updatedAt: now,
+    };
   }
 
-  async resumeSession(opts: SessionStartOpts): Promise<void> {
-    await this.startSession(opts);
+  async stopSession(threadId: number): Promise<void> {
+    const session = this.sessions.get(threadId);
+    if (!session) return;
+    session.abortCtrl.abort();
+    this.sessions.delete(threadId);
+    this.emit({
+      id: generateEventId(),
+      kind: 'session',
+      provider: 'ollama',
+      threadId,
+      createdAt: new Date().toISOString(),
+      method: 'session/closed',
+    });
   }
 
-  async sendTurn(opts: TurnSendOpts): Promise<void> {
-    const session = this.sessions.get(opts.sessionId);
-    if (!session) throw new Error(`Session ${opts.sessionId} not found`);
+  async stopAll(): Promise<void> {
+    for (const threadId of Array.from(this.sessions.keys())) {
+      await this.stopSession(threadId);
+    }
+  }
 
-    session.turnId = opts.turnId;
-    this.emit({ type: 'turn.started', sessionId: opts.sessionId, turnId: opts.turnId });
+  async sendTurn(input: ProviderSendTurnInput): Promise<ProviderTurnStartResult> {
+    const session = this.sessions.get(input.threadId);
+    if (!session) throw new Error(`Session for thread ${input.threadId} not found`);
 
-    let fullPrompt = opts.prompt;
-    if (opts.contextFiles?.length) {
-      const fileContents = await this.readFiles(opts.contextFiles);
-      fullPrompt = `${fileContents}\n\n---\n\n${opts.prompt}`;
+    const turnId = generateTurnId();
+    session.turnId = turnId;
+
+    this.emit({
+      id: generateEventId(),
+      kind: 'notification',
+      provider: 'ollama',
+      threadId: input.threadId,
+      createdAt: new Date().toISOString(),
+      method: 'turn/started',
+      turnId,
+    });
+
+    let fullPrompt = input.input ?? '';
+    if (input.attachments?.length) {
+      const fileContents = await this.readFiles(input.attachments.map((a) => a.path));
+      fullPrompt = `${fileContents}\n\n---\n\n${fullPrompt}`;
     }
 
     session.history.push({ role: 'user', content: fullPrompt });
 
     try {
-      const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      const response = await fetch(`${session.baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -111,7 +175,16 @@ export class OllamaAdapter implements ProviderAdapter {
             const token = data.message?.content || '';
             if (token) {
               fullContent += token;
-              this.emit({ type: 'content.delta', sessionId: opts.sessionId, turnId: opts.turnId, text: token });
+              this.emit({
+                id: generateEventId(),
+                kind: 'notification',
+                provider: 'ollama',
+                threadId: input.threadId,
+                createdAt: new Date().toISOString(),
+                method: 'item/agentMessage/delta',
+                turnId,
+                textDelta: token,
+              });
             }
             if (data.done) { reader.cancel(); break; }
           } catch { /* ignore malformed lines */ }
@@ -119,36 +192,94 @@ export class OllamaAdapter implements ProviderAdapter {
       }
 
       session.history.push({ role: 'assistant', content: fullContent });
-      this.emit({ type: 'turn.completed', sessionId: opts.sessionId, turnId: opts.turnId });
+      this.emit({
+        id: generateEventId(),
+        kind: 'notification',
+        provider: 'ollama',
+        threadId: input.threadId,
+        createdAt: new Date().toISOString(),
+        method: 'turn/completed',
+        turnId,
+      });
     } catch (err: any) {
-      if (err.name === 'AbortError') return;
+      if (err.name === 'AbortError') {
+        session.turnId = null;
+        return { turnId };
+      }
       let message = err.message || 'Unknown Ollama error';
       if (message.includes('fetch failed') || message.includes('ECONNREFUSED')) {
-        message = `Ollama is not running. Start it with: ollama serve`;
+        message = 'Ollama is not running. Start it with: ollama serve';
       }
-      this.emit({ type: 'turn.error', sessionId: opts.sessionId, turnId: opts.turnId, message });
+      this.emit({
+        id: generateEventId(),
+        kind: 'error',
+        provider: 'ollama',
+        threadId: input.threadId,
+        createdAt: new Date().toISOString(),
+        method: 'error/turn',
+        turnId,
+        message,
+      });
     } finally {
       session.turnId = null;
     }
+
+    return { turnId };
   }
 
-  async interruptTurn(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
+  async interruptTurn(threadId: number, _turnId?: string): Promise<void> {
+    const session = this.sessions.get(threadId);
     if (!session) return;
     session.abortCtrl.abort();
     session.abortCtrl = new AbortController();
   }
 
-  async respondToApproval(): Promise<void> {
+  async respondToRequest(_threadId: number, _requestId: string, _decision: ProviderApprovalDecision): Promise<void> {
     // Ollama doesn't have approvals
   }
 
-  async stopSession(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-    session.abortCtrl.abort();
-    this.sessions.delete(sessionId);
-    this.emit({ type: 'session.stopped', sessionId });
+  async respondToUserInput(_threadId: number, _requestId: string, _answers: ProviderUserInputAnswers): Promise<void> {
+    // Ollama doesn't have user-input requests
+  }
+
+  async readThread(threadId: number): Promise<ProviderThreadSnapshot> {
+    const session = this.sessions.get(threadId);
+    if (!session) return { turns: [] };
+    return {
+      turns: session.history.map((m, i) => ({
+        turnId: `turn-${i}`,
+        role: m.role as any,
+        content: m.content,
+        createdAt: new Date().toISOString(),
+      })),
+    };
+  }
+
+  async rollbackThread(threadId: number, numTurns: number): Promise<ProviderThreadSnapshot> {
+    const session = this.sessions.get(threadId);
+    if (!session) return { turns: [] };
+    // Each turn = 2 messages (user + assistant). Remove last N*2 messages.
+    const removeCount = numTurns * 2;
+    session.history = session.history.slice(0, Math.max(1, session.history.length - removeCount));
+    return this.readThread(threadId);
+  }
+
+  async listSessions(): Promise<readonly ProviderSession[]> {
+    const now = new Date().toISOString();
+    return Array.from(this.sessions.entries()).map(([threadId, s]) => ({
+      provider: 'ollama' as const,
+      status: 'ready' as const,
+      runtimeMode: 'full-access' as const,
+      threadId,
+      model: s.model,
+      activeTurnId: s.turnId ?? undefined,
+      createdAt: now,
+      updatedAt: now,
+    }));
+  }
+
+  async hasSession(threadId: number): Promise<boolean> {
+    return this.sessions.has(threadId);
   }
 
   onEvent(handler: (event: ProviderRuntimeEvent) => void): () => void {
@@ -157,7 +288,13 @@ export class OllamaAdapter implements ProviderAdapter {
   }
 
   private emit(event: ProviderRuntimeEvent) {
-    this.eventHandlers.forEach((h) => h(event));
+    for (const h of this.eventHandlers) {
+      try {
+        h(event);
+      } catch {
+        // ignore
+      }
+    }
   }
 
   private async readFiles(paths: string[]): Promise<string> {
