@@ -35,9 +35,22 @@ export interface ElectronAPI {
     sendMessage: (threadId: number, message: string, model: string) => Promise<void>;
     cancel: (threadId: number) => Promise<void>;
   };
+  provider: {
+    getStatuses: () => Promise<Record<string, any>>;
+    getModels: () => Promise<Record<string, string[]>>;
+    probe: (kind: string) => Promise<void>;
+    startSession: (params: any) => Promise<string>;
+    sendTurn: (threadId: number, turnId: string, prompt: string, contextFiles?: string[]) => Promise<void>;
+    interruptTurn: (threadId: number) => Promise<void>;
+    respondToApproval: (threadId: number, requestId: string, approved: boolean) => Promise<void>;
+    stopSession: (threadId: number) => Promise<void>;
+  };
   onChatToken: (callback: (data: { threadId: number; token: string }) => void) => () => void;
   onChatDone: (callback: (data: { threadId: number }) => void) => () => void;
   onChatError: (callback: (data: { threadId: number; error: string }) => void) => () => void;
+  onProviderEvent: (callback: (event: any) => void) => () => void;
+  onProviderStatus: (callback: (data: { kind: string; status: any }) => void) => () => void;
+  onProviderModels: (callback: (data: { kind: string; models: string[] }) => void) => () => void;
   onNavigate: (callback: (path: string) => void) => () => void;
 }
 
@@ -76,6 +89,16 @@ const api: ElectronAPI = {
     sendMessage: (threadId, message, model) => ipcRenderer.invoke('chat:sendMessage', threadId, message, model),
     cancel: (threadId) => ipcRenderer.invoke('chat:cancel', threadId),
   },
+  provider: {
+    getStatuses: () => ipcRenderer.invoke('provider:getStatuses'),
+    getModels: () => ipcRenderer.invoke('provider:getModels'),
+    probe: (kind) => ipcRenderer.invoke('provider:probe', kind),
+    startSession: (params) => ipcRenderer.invoke('provider:startSession', params),
+    sendTurn: (threadId, turnId, prompt, contextFiles) => ipcRenderer.invoke('provider:sendTurn', threadId, turnId, prompt, contextFiles),
+    interruptTurn: (threadId) => ipcRenderer.invoke('provider:interruptTurn', threadId),
+    respondToApproval: (threadId, requestId, approved) => ipcRenderer.invoke('provider:respondToApproval', threadId, requestId, approved),
+    stopSession: (threadId) => ipcRenderer.invoke('provider:stopSession', threadId),
+  },
   onChatToken: (callback) => {
     const handler = (_: any, data: any) => callback(data);
     ipcRenderer.on('chat:token', handler);
@@ -90,6 +113,21 @@ const api: ElectronAPI = {
     const handler = (_: any, data: any) => callback(data);
     ipcRenderer.on('chat:error', handler);
     return () => ipcRenderer.removeListener('chat:error', handler);
+  },
+  onProviderEvent: (callback) => {
+    const handler = (_: any, event: any) => callback(event);
+    ipcRenderer.on('provider:event', handler);
+    return () => ipcRenderer.removeListener('provider:event', handler);
+  },
+  onProviderStatus: (callback) => {
+    const handler = (_: any, data: any) => callback(data);
+    ipcRenderer.on('provider:status', handler);
+    return () => ipcRenderer.removeListener('provider:status', handler);
+  },
+  onProviderModels: (callback) => {
+    const handler = (_: any, data: any) => callback(data);
+    ipcRenderer.on('provider:models', handler);
+    return () => ipcRenderer.removeListener('provider:models', handler);
   },
   onNavigate: (callback) => {
     const handler = (_: any, path: string) => callback(path);

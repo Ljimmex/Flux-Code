@@ -2,6 +2,7 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, globalSho
 import * as path from 'path';
 import { DatabaseManager } from './db';
 import { initChat, cleanupChat } from './chat';
+import { initProviders, cleanupProviders } from './provider';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -110,9 +111,12 @@ app.whenReady().then(() => {
   app.setAppUserModelId('com.fluxcode.app');
   console.log('[Electron] App ready. isDev =', isDev);
   dbManager.init();
-  initChat(dbManager);
   createWindow();
   createTray();
+  initChat(dbManager);
+  if (mainWindow) {
+    initProviders(mainWindow);
+  }
 
   globalShortcut.register('CommandOrControl+Shift+C', () => {
     if (mainWindow) {
@@ -135,6 +139,7 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   cleanupChat();
+  cleanupProviders();
   dbManager.close();
 });
 

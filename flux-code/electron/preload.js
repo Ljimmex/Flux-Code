@@ -34,6 +34,16 @@ const api = {
         sendMessage: (threadId, message, model) => ipcRenderer.invoke('chat:sendMessage', threadId, message, model),
         cancel: (threadId) => ipcRenderer.invoke('chat:cancel', threadId),
     },
+    provider: {
+        getStatuses: () => ipcRenderer.invoke('provider:getStatuses'),
+        getModels: () => ipcRenderer.invoke('provider:getModels'),
+        probe: (kind) => ipcRenderer.invoke('provider:probe', kind),
+        startSession: (params) => ipcRenderer.invoke('provider:startSession', params),
+        sendTurn: (threadId, turnId, prompt, contextFiles) => ipcRenderer.invoke('provider:sendTurn', threadId, turnId, prompt, contextFiles),
+        interruptTurn: (threadId) => ipcRenderer.invoke('provider:interruptTurn', threadId),
+        respondToApproval: (threadId, requestId, approved) => ipcRenderer.invoke('provider:respondToApproval', threadId, requestId, approved),
+        stopSession: (threadId) => ipcRenderer.invoke('provider:stopSession', threadId),
+    },
     onChatToken: (callback) => {
         const handler = (_, data) => callback(data);
         ipcRenderer.on('chat:token', handler);
@@ -48,6 +58,21 @@ const api = {
         const handler = (_, data) => callback(data);
         ipcRenderer.on('chat:error', handler);
         return () => ipcRenderer.removeListener('chat:error', handler);
+    },
+    onProviderEvent: (callback) => {
+        const handler = (_, event) => callback(event);
+        ipcRenderer.on('provider:event', handler);
+        return () => ipcRenderer.removeListener('provider:event', handler);
+    },
+    onProviderStatus: (callback) => {
+        const handler = (_, data) => callback(data);
+        ipcRenderer.on('provider:status', handler);
+        return () => ipcRenderer.removeListener('provider:status', handler);
+    },
+    onProviderModels: (callback) => {
+        const handler = (_, data) => callback(data);
+        ipcRenderer.on('provider:models', handler);
+        return () => ipcRenderer.removeListener('provider:models', handler);
     },
     onNavigate: (callback) => {
         const handler = (_, path) => callback(path);
