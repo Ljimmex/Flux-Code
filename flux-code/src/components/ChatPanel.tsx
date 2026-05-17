@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowUp, Square, User, Bot, Lock, Check, Search } from './icons';
+import { ArrowUp, Square, User, Bot, Lock, Check, Search, Copy } from './icons';
 import logo from '../Fluxavatar.png';
 import type { Thread, Project } from '../App';
 
@@ -48,6 +48,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
   const [messages, setMessages] = useState<any[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [errorToast, setErrorToast] = useState<string | null>(null);
 
   const [openDropdown, setOpenDropdown] = useState<null | 'model' | 'access' | 'variant'>(null);
   const [selectedModel, setSelectedModel] = useState(MODELS[0]);
@@ -135,7 +136,8 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
         setIsGenerating(false);
         generatingRef.current = false;
         setStreamingContent('');
-        alert('Chat error: ' + error);
+        setErrorToast(error);
+        setTimeout(() => setErrorToast(null), 5000);
       }
     });
     return () => {
@@ -213,6 +215,12 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
 
   return (
     <div className="chat-panel">
+      {errorToast && (
+        <div className="chat-toast error">
+          <span>{errorToast}</span>
+          <button className="chat-toast-close" onClick={() => setErrorToast(null)}>×</button>
+        </div>
+      )}
       <div className="chat-messages">
         {messages.length === 0 && (
           <div className="chat-welcome">
@@ -220,14 +228,33 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
             <p>Ask the agent to do something...</p>
           </div>
         )}
-        {messages.map((msg, i) => (
-          <div key={i} className={`message message-${msg.role}`}>
-            <div className="message-avatar">
-              {msg.role === 'user' ? <User size={18} /> : <img src={logo} alt="AI" className="msg-avatar-img" />}
+        {messages.map((msg, i) => {
+          const time = msg.created_at
+            ? new Date(msg.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            : '';
+          return (
+            <div key={i} className={`message message-${msg.role}`}>
+              <div className="message-avatar">
+                {msg.role === 'user' ? <User size={18} /> : <img src={logo} alt="AI" className="msg-avatar-img" />}
+              </div>
+              <div className="message-body">
+                <div className="message-content">{msg.content}</div>
+                {msg.role === 'user' && (
+                  <div className="message-meta">
+                    <span className="message-time">{time}</span>
+                    <button
+                      className="message-copy-btn"
+                      onClick={() => navigator.clipboard.writeText(msg.content)}
+                      title="Copy message"
+                    >
+                      <Copy size={12} />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="message-content">{msg.content}</div>
-          </div>
-        ))}
+          );
+        })}
         {isGenerating && streamingContent && (
           <div className="message message-assistant">
             <div className="message-avatar">
