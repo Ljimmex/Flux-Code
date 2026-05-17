@@ -1105,10 +1105,6 @@ textarea {
 }
 
 .message-content {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
   padding: 12px 16px;
   border-radius: var(--radius);
   background: var(--bg-secondary);
@@ -1124,17 +1120,16 @@ textarea {
 }
 
 .message-text {
-  flex: 1;
-  min-width: 0;
   word-break: break-word;
 }
 
 .message-content-meta {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
-  flex-shrink: 0;
-  margin-top: 2px;
+  margin-top: 6px;
+  padding-right: 4px;
 }
 
 .message-time {

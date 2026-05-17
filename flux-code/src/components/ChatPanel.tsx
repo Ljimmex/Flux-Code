@@ -236,19 +236,19 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
             <div key={i} className={`message message-${msg.role}`}>
               <div className="message-content">
                 <span className="message-text">{msg.content}</span>
-                {msg.role === 'user' && (
-                  <div className="message-content-meta">
-                    <button
-                      className="message-copy-btn"
-                      onClick={() => navigator.clipboard.writeText(msg.content)}
-                      title="Copy message"
-                    >
-                      <Copy size={12} />
-                    </button>
-                    <span className="message-time">{time}</span>
-                  </div>
-                )}
               </div>
+              {msg.role === 'user' && (
+                <div className="message-content-meta">
+                  <button
+                    className="message-copy-btn"
+                    onClick={() => navigator.clipboard.writeText(msg.content)}
+                    title="Copy message"
+                  >
+                    <Copy size={12} />
+                  </button>
+                  <span className="message-time">{time}</span>
+                </div>
+              )}
             </div>
           );
         })}
