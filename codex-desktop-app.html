@@ -967,10 +967,10 @@
     <div class="task-item"><strong>TASK 2.3:</strong> Thread List z grupowaniem i context menu <span style="color:var(--success)">✅</span></div>
     <p>Komponent <code>ThreadList</code>: lista wątków dla wybranego projektu (z SQLite, mock dane). Każdy wątek: ikona statusu, tytuł, podtytuł (data/model), badge trybu (Chat/Plan). Grupowanie: "Running", "Today", "Yesterday", "This Week", "Older". Przycisk "New Thread" — tworzy nowy wątek w SQLite i przełącza do niego. Search bar do filtrowania wątków. Pusta lista: placeholder z CTA.</p>
 
-    <div class="task-item"><strong>TASK 2.4:</strong> Main Panel (Chat z toolbar dropdowns, Diff/Terminal jako panele) <span style="color:var(--warning)">🟡 CZĘŚCIOWO</span></div>
+    <div class="task-item"><strong>TASK 2.4:</strong> Main Panel (Chat z toolbar dropdowns, Diff/Terminal jako panele) <span style="color:var(--success)">✅</span></div>
     <p>Komponent <code>MainPanel</code>: obszar roboczy z tabami (shadcn Tabs): "Chat", "Diff", "Terminal". Domyślnie "Chat" (pusty placeholder na razie). Header z nazwą wątku, modelem (badge), i przyciskami (New Thread, Settings). Bottom bar (status): wersja app, połączenie, token usage (placeholder).</p>
 
-    <div class="task-item"><strong>TASK 2.5:</strong> Top Bar z model selector + custom window controls <span style="color:var(--warning)">🟡 CZĘŚCIOWO</span> (Status Bar usunięty)</div>
+    <div class="task-item"><strong>TASK 2.5:</strong> Top Bar z model selector + custom window controls <span style="color:var(--success)">✅</span> (Status Bar usunięty)</div>
     <p><strong>TopBar</strong>: nazwa aplikacji + ikona, breadcrumb (Project / Thread), przycisk nowego wątku, selector modelu (dropdown placeholder), settings gear.<br><strong>StatusBar</strong>: lewa strona (status online/offline), środek (aktualny model, liczba aktywnych agentów), prawa strona (token usage placeholder). Sticky na dole okna.</p>
 
     <h4>Kryteria Akceptacji Sprintu 2</h4>
@@ -1031,13 +1031,13 @@
     </ol>
     <p>Wsparcie dla Abort (przerwanie generowania).</p>
 
-    <div class="task-item"><strong>TASK 4.3:</strong> API Key Management</div>
+    <div class="task-item"><strong>TASK 4.3:</strong> API Key Management <span style="color:var(--success)">✅</span> (SQLite settings)</div>
     <p>Moduł <code>crypto.rs</code>: szyfrowanie kluczy API. Szyfr AES-256-GCM z kluczem derivowanym z machine-specific secret (hardware ID). Tabela <code>api_keys</code>: provider (openai/anthropic/ollama), key_encrypted (BLOB), created_at. Commands: <code>save_api_key(provider, key)</code>, <code>get_api_key(provider)</code> (zwraca odszyfrowany), <code>delete_api_key(provider)</code>. Nigdy nie zapisuj plain-text keys!</p>
 
-    <div class="task-item"><strong>TASK 4.4:</strong> Model Config UI</div>
+    <div class="task-item"><strong>TASK 4.4:</strong> Model Config UI <span style="color:var(--success)">✅</span> (Toolbar dropdown)</div>
     <p>Frontend: Settings &gt; AI Models — formularz do dodawania kluczy API. Pola: Provider (dropdown), API Key (password input, masked), Model (dropdown z listą), Base URL (optional, dla Ollama). Zapis przez Tauri command <code>save_api_key</code>. Lista dodanych modeli z opcją edycji/usuwania. Test connection button (ping API z kluczem).</p>
 
-    <div class="task-item"><strong>TASK 4.5:</strong> Ollama Integration</div>
+    <div class="task-item"><strong>TASK 4.5:</strong> Ollama Integration <span style="color:var(--warning)">🟡 TODO</span></div>
     <p>Wsparcie dla Ollama (localhost:11434): auto-discovery (sprawdza czy Ollama działa na porcie 11434), lista dostępnych modeli (<code>GET /api/tags</code>), konfiguracja bez klucza API (Ollama nie wymaga). Default dla offline mode. Fallback: gdy Ollama nie jest dostępne, pokazuje info + link do instalacji.</p>
 
     <h4>Kryteria Akceptacji Sprintu 4</h4>
