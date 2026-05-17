@@ -1105,6 +1105,9 @@ textarea {
 }
 
 .message-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 12px 16px;
   border-radius: var(--radius);
   background: var(--bg-secondary);
@@ -1126,10 +1129,8 @@ textarea {
 .message-content-meta {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 8px;
-  margin-top: 6px;
-  padding-right: 4px;
+  align-self: flex-end;
 }
 
 .message-time {
