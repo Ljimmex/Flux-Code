@@ -485,25 +485,27 @@ export class KimiAdapter implements ProviderAdapterShape {
     const session = this.sessions.get(threadId);
     if (!session) return;
 
-    // Incoming request from agent (has id + method, but not a response to our request)
-    if ('id' in msg && typeof msg.id === 'number' && 'method' in msg) {
+    // Messages with id: either response to our request OR incoming request from agent
+    if ('id' in msg && typeof msg.id === 'number') {
       const pending = session.pendingReqs.get(msg.id);
       if (pending) {
-        // It's a response to our pending request
+        // It's a response to our pending request (has id, no method)
         session.pendingReqs.delete(msg.id);
         if ('error' in msg && (msg as JsonRpcResponse).error) {
           pending.reject(new Error((msg as JsonRpcResponse).error!.message));
         } else {
           pending.resolve((msg as JsonRpcResponse).result);
         }
-      } else {
-        // It's an incoming request FROM the agent (e.g. session/request_permission)
-        this.handleAgentRequest(threadId, msg as JsonRpcRequest);
+        return;
       }
-      return;
+      if ('method' in msg) {
+        // It's an incoming request FROM the agent (has id + method)
+        this.handleAgentRequest(threadId, msg as JsonRpcRequest);
+        return;
+      }
     }
 
-    // Handle notifications (no id)
+    // Handle notifications (has method, no id)
     if ('method' in msg && !('id' in msg)) {
       this.handleNotification(threadId, msg as JsonRpcNotification);
     }
