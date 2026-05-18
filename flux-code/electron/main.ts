@@ -168,6 +168,7 @@ ipcMain.handle('db:getArchivedThreads', () => dbManager.getArchivedThreads());
 ipcMain.handle('db:markThreadRead', (_, id: number) => dbManager.markThreadRead(id));
 ipcMain.handle('db:markThreadUnread', (_, id: number) => dbManager.markThreadUnread(id));
 ipcMain.handle('db:renameProject', (_, id: number, name: string) => dbManager.renameProject(id, name));
+ipcMain.handle('db:getActivitiesForThread', (_, threadId: number) => dbManager.getActivitiesForThread(threadId));
 ipcMain.handle('dialog:openDirectory', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory'] });
   return result.canceled ? null : result.filePaths[0];

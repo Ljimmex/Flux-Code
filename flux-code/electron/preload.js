@@ -16,6 +16,7 @@ const api = {
         renameProject: (id, name) => ipcRenderer.invoke('db:renameProject', id, name),
         getSettings: () => ipcRenderer.invoke('db:getSettings'),
         setSetting: (key, value) => ipcRenderer.invoke('db:setSetting', key, value),
+        getActivitiesForThread: (threadId) => ipcRenderer.invoke('db:getActivitiesForThread', threadId),
     },
     dialog: {
         openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),

@@ -12,6 +12,7 @@ import { useProviderStore } from './stores/providerStore';
 import type { ProviderKind } from './types/provider';
 import './styles/global.css';
 import './styles/markdown.css';
+import './styles/activity.css';
 import 'highlight.js/styles/github-dark.min.css';
 
 export interface Project {

@@ -1,5 +1,6 @@
 import { ipcMain, type BrowserWindow } from 'electron';
 import { spawn } from 'child_process';
+import * as path from 'path';
 import { ProviderAdapterRegistry } from './ProviderAdapterRegistry';
 import { ProviderSessionDirectory } from './ProviderSessionDirectory';
 import { HealthService } from './HealthService';
@@ -50,6 +51,55 @@ const turnAccumulator = new Map<string, string>();
 const turnStartTimes = new Map<string, number>();
 const lastDelta = new Map<string, string>();
 
+// ─── Activity Summary Generator ───────────────────────────────────────────
+
+function generateShellSummary(command: string): string {
+  const cmd = command.trim().toLowerCase();
+  if (cmd.startsWith('npm') || cmd.startsWith('bun') || cmd.startsWith('yarn') || cmd.startsWith('pnpm')) {
+    return command.includes('install') ? 'Install dependencies' : 'Run package script';
+  }
+  if (cmd.startsWith('git')) return 'Git operation';
+  if (cmd.startsWith('find') || cmd.startsWith('grep') || cmd.startsWith('ls') || cmd.startsWith('fd')) return 'Explore codebase';
+  if (cmd.startsWith('cat') || cmd.startsWith('head') || cmd.startsWith('tail') || cmd.startsWith('less')) return 'Read file contents';
+  if (cmd.startsWith('mkdir') || cmd.startsWith('touch')) return 'Create file or directory';
+  if (cmd.startsWith('rm') || cmd.startsWith('rmdir')) return 'Remove file or directory';
+  if (cmd.startsWith('cp') || cmd.startsWith('mv')) return 'Move or copy file';
+  if (cmd.startsWith('docker')) return 'Docker operation';
+  if (cmd.startsWith('python') || cmd.startsWith('node') || cmd.startsWith('ts-node')) return 'Run script';
+  if (cmd.startsWith('pytest') || cmd.startsWith('jest') || cmd.startsWith('vitest')) return 'Run tests';
+  const first = command.split(' ')[0];
+  return first ? `Run ${first}` : 'Run command';
+}
+
+function mapToolToActivity(toolName: string, payload: any): { label: string; kind: string } {
+  switch (toolName) {
+    case 'bash':
+    case 'shell':
+    case 'computer': {
+      const cmd = payload?.command ?? payload?.action ?? '';
+      return { label: generateShellSummary(cmd), kind: 'shell' };
+    }
+    case 'read_file':
+    case 'view':
+    case 'cat': {
+      const p = payload?.path ?? payload?.file_path ?? '';
+      return { label: `Read ${path.basename(p) || p}`, kind: 'fileRead' };
+    }
+    case 'write_file':
+    case 'str_replace_editor':
+    case 'create_file': {
+      const p = payload?.path ?? payload?.file_path ?? '';
+      return { label: `Edit ${path.basename(p) || p}`, kind: 'fileWrite' };
+    }
+    case 'thinking': {
+      return { label: 'Thinking...', kind: 'thinking' };
+    }
+    default: {
+      return { label: toolName || 'Tool', kind: 'tool' };
+    }
+  }
+}
+
 export async function initProviders(win: BrowserWindow, db?: DatabaseManager): Promise<void> {
   mainWindow = win;
 
@@ -93,6 +143,54 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
         }
         return;
       }
+      if (event.kind === 'notification' && event.method === 'item/tool/started') {
+        if (event.turnId && db) {
+          const payload = (event as any).payload ?? {};
+          const toolName = (event as any).toolName ?? payload?.toolName ?? 'tool';
+          const { label, kind } = mapToolToActivity(toolName, payload);
+          try {
+            const activity = db.addActivity({
+              thread_id: event.threadId,
+              turn_id: event.turnId,
+              item_id: event.itemId ?? undefined,
+              kind,
+              label,
+              status: 'running',
+              tool_name: toolName,
+              tool_input: JSON.stringify(payload),
+            });
+            broadcast({ ...event, _activityId: activity?.id } as ProviderRuntimeEvent);
+          } catch (e: any) {
+            console.error('[Provider] Failed to save activity:', e.message);
+          }
+        }
+        return;
+      }
+      if (event.kind === 'notification' && event.method === 'item/tool/completed') {
+        if (event.turnId && db) {
+          const payload = (event as any).payload ?? {};
+          const toolName = (event as any).toolName ?? payload?.toolName ?? 'tool';
+          try {
+            // Find latest running activity for this turn + tool
+            const activities = db.getActivitiesForTurn(event.turnId);
+            const match = activities.reverse().find((a: any) => a.tool_name === toolName && a.status === 'running');
+            if (match) {
+              const endedAt = new Date().toISOString();
+              db.updateActivityStatus(
+                match.id,
+                'completed',
+                JSON.stringify(payload),
+                payload?.exitCode ?? undefined,
+                endedAt
+              );
+              broadcast({ ...event, _activityId: match.id } as ProviderRuntimeEvent);
+            }
+          } catch (e: any) {
+            console.error('[Provider] Failed to update activity:', e.message);
+          }
+        }
+        return;
+      }
       if (event.kind === 'notification' && event.method === 'turn/completed') {
         if (event.turnId) {
           const key = `${event.threadId}:${event.turnId}`;
@@ -104,7 +202,7 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
           if (content) {
             try {
               const metadata = JSON.stringify({ endTime, durationMs });
-              db.addMessage(event.threadId, 'assistant', content, metadata);
+              db.addMessage(event.threadId, 'assistant', content, metadata, event.turnId);
               console.log('[Provider] Saved assistant message to DB, thread:', event.threadId);
             } catch (e: any) {
               console.error('[Provider] Failed to save assistant message:', e.message);
@@ -170,12 +268,12 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
 
   ipcMain.handle('provider:sendTurn', async (_, threadId: number, turnId: string, prompt: string, contextFiles?: string[]) => {
     if (db) {
-      try { db.addMessage(threadId, 'user', prompt); } catch {}
+      try { db.addMessage(threadId, 'user', prompt, undefined, turnId); } catch {}
     }
     await providerService.sendTurn({
       threadId,
       input: prompt,
-      attachments: contextFiles?.map((path) => ({ path })),
+      attachments: contextFiles?.map((p) => ({ path: p })),
     });
     // Return turnId so renderer can correlate
     return { turnId };

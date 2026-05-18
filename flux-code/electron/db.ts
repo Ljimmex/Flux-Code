@@ -140,6 +140,38 @@ export class DatabaseManager {
       this.db.exec('ALTER TABLE threads ADD COLUMN is_read INTEGER DEFAULT 1');
     }
     this.db.exec("UPDATE threads SET is_read = 1 WHERE is_read IS NULL");
+
+    // Add turn_id column to messages if not exists (backward compat)
+    const msgCols = this.db.pragma("table_info(messages)") as Array<{ name: string }>;
+    const hasTurnId = msgCols.some(c => c.name === 'turn_id');
+    if (!hasTurnId) {
+      this.db.exec('ALTER TABLE messages ADD COLUMN turn_id TEXT');
+    }
+
+    // Create activities table if not exists
+    const tables = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='activities'").get();
+    if (!tables) {
+      this.db.exec(`
+        CREATE TABLE activities (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          thread_id INTEGER NOT NULL,
+          turn_id TEXT NOT NULL,
+          item_id TEXT,
+          kind TEXT NOT NULL,
+          label TEXT NOT NULL,
+          status TEXT NOT NULL,
+          tool_name TEXT,
+          tool_input TEXT,
+          tool_output TEXT,
+          exit_code INTEGER,
+          started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          ended_at DATETIME,
+          FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE CASCADE
+        )
+      `);
+      this.db.exec('CREATE INDEX idx_activities_thread ON activities(thread_id)');
+      this.db.exec('CREATE INDEX idx_activities_turn ON activities(turn_id)');
+    }
   }
 
   private seedBuiltInSkills(): void {
@@ -223,10 +255,10 @@ export class DatabaseManager {
     return this.db.prepare('SELECT * FROM messages WHERE thread_id = ? ORDER BY created_at ASC').all(threadId);
   }
 
-  addMessage(threadId: number, role: string, content: string, metadata?: string): any {
+  addMessage(threadId: number, role: string, content: string, metadata?: string, turnId?: string): any {
     if (!this.db) return null;
-    const stmt = this.db.prepare('INSERT INTO messages (thread_id, role, content, metadata) VALUES (?, ?, ?, ?)');
-    const result = stmt.run(threadId, role, content, metadata ?? null);
+    const stmt = this.db.prepare('INSERT INTO messages (thread_id, role, content, metadata, turn_id) VALUES (?, ?, ?, ?, ?)');
+    const result = stmt.run(threadId, role, content, metadata ?? null, turnId ?? null);
     return this.db.prepare('SELECT * FROM messages WHERE id = ?').get(result.lastInsertRowid);
   }
 
@@ -260,6 +292,61 @@ export class DatabaseManager {
     if (!this.db) return;
     const stmt = this.db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
     stmt.run(key, value);
+  }
+
+  addActivity(activity: {
+    thread_id: number;
+    turn_id: string;
+    item_id?: string;
+    kind: string;
+    label: string;
+    status: string;
+    tool_name?: string;
+    tool_input?: string;
+  }): any {
+    if (!this.db) return null;
+    const stmt = this.db.prepare(
+      'INSERT INTO activities (thread_id, turn_id, item_id, kind, label, status, tool_name, tool_input) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    const result = stmt.run(
+      activity.thread_id,
+      activity.turn_id,
+      activity.item_id ?? null,
+      activity.kind,
+      activity.label,
+      activity.status,
+      activity.tool_name ?? null,
+      activity.tool_input ?? null
+    );
+    return this.db.prepare('SELECT * FROM activities WHERE id = ?').get(result.lastInsertRowid);
+  }
+
+  getActivitiesForThread(threadId: number): any[] {
+    if (!this.db) return [];
+    return this.db.prepare(
+      'SELECT * FROM activities WHERE thread_id = ? ORDER BY started_at ASC'
+    ).all(threadId);
+  }
+
+  getActivitiesForTurn(turnId: string): any[] {
+    if (!this.db) return [];
+    return this.db.prepare(
+      'SELECT * FROM activities WHERE turn_id = ? ORDER BY started_at ASC'
+    ).all(turnId);
+  }
+
+  updateActivityStatus(
+    id: number,
+    status: string,
+    toolOutput?: string,
+    exitCode?: number,
+    endedAt?: string
+  ): void {
+    if (!this.db) return;
+    const stmt = this.db.prepare(
+      'UPDATE activities SET status = ?, tool_output = ?, exit_code = ?, ended_at = ? WHERE id = ?'
+    );
+    stmt.run(status, toolOutput ?? null, exitCode ?? null, endedAt ?? null, id);
   }
 
   close(): void {

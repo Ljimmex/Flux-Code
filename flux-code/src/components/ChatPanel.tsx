@@ -7,7 +7,9 @@ import logo from '../Fluxavatar.png';
 import type { Thread, Project } from '../App';
 import { useProviderStore, type ProviderDraft } from '../stores/providerStore';
 import { DEFAULT_MODEL, type ProviderKind } from '../types/provider';
+import type { ActivityItem } from '../types/activity';
 import MarkdownRenderer from './MarkdownRenderer';
+import { WorkLog } from './WorkLog';
 
 interface Props {
   activeThread: Thread | null;
@@ -268,6 +270,7 @@ function ClaudeOptions({
 export default function ChatPanel({ activeThread, activeProject, onAddThread }: Props) {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [errorToast, setErrorToast] = useState<string | null>(null);
@@ -455,9 +458,24 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
   useEffect(() => {
     if (!activeThread) {
       setMessages([]);
+      setActivities([]);
       return;
     }
     window.electronAPI.chat.getMessages(activeThread.id).then(setMessages);
+    window.electronAPI.db.getActivitiesForThread(activeThread.id).then(setActivities);
+  }, [activeThread?.id]);
+
+  // Listen for live activity events from provider
+  useEffect(() => {
+    const unsub = window.electronAPI.onProviderEvent((event: any) => {
+      if (
+        activeThread &&
+        (event.method === 'item/tool/started' || event.method === 'item/tool/completed')
+      ) {
+        window.electronAPI.db.getActivitiesForThread(activeThread.id).then(setActivities);
+      }
+    });
+    return unsub;
   }, [activeThread?.id]);
 
   // Reload messages when provider turn completes (backend saved assistant message to DB)
@@ -470,6 +488,9 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
           setIsGenerating(false);
           generatingRef.current = false;
           setStreamingContent('');
+
+          // Also refresh activities
+          window.electronAPI.db.getActivitiesForThread(activeThread.id).then(setActivities);
 
           // Auto-rename thread after first exchange if it still has default name
           const isDefaultName = activeThread.title === 'New Thread';
@@ -578,6 +599,66 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     setModelMeta(`${provider}:${model}`, { favorite: !meta.favorite });
   };
 
+  // Build timeline: group messages + activities by turn
+  const timeline = useMemo(() => {
+    interface TimelineItem {
+      type: 'user' | 'worklog' | 'assistant';
+      message?: any;
+      activities?: ActivityItem[];
+      turnId?: string;
+    }
+
+    const result: TimelineItem[] = [];
+    const activitiesByTurn = new Map<string, ActivityItem[]>();
+    for (const act of activities) {
+      const list = activitiesByTurn.get(act.turn_id) || [];
+      list.push(act);
+      activitiesByTurn.set(act.turn_id, list);
+    }
+
+    // Group messages by turn_id
+    const messagesByTurn = new Map<string, any[]>();
+    const orphanMessages: any[] = [];
+    for (const msg of messages) {
+      if (msg.turn_id) {
+        const list = messagesByTurn.get(msg.turn_id) || [];
+        list.push(msg);
+        messagesByTurn.set(msg.turn_id, list);
+      } else {
+        orphanMessages.push(msg);
+      }
+    }
+
+    // Render turns in order of appearance
+    const seenTurns = new Set<string>();
+    for (const msg of messages) {
+      if (msg.turn_id && !seenTurns.has(msg.turn_id)) {
+        seenTurns.add(msg.turn_id);
+        const turnMessages = messagesByTurn.get(msg.turn_id) || [];
+        const userMsg = turnMessages.find((m: any) => m.role === 'user');
+        const assistantMsg = turnMessages.find((m: any) => m.role === 'assistant');
+        const turnActivities = activitiesByTurn.get(msg.turn_id) || [];
+
+        if (userMsg) {
+          result.push({ type: 'user', message: userMsg, turnId: msg.turn_id });
+        }
+        if (turnActivities.length > 0) {
+          result.push({ type: 'worklog', activities: turnActivities, turnId: msg.turn_id });
+        }
+        if (assistantMsg) {
+          result.push({ type: 'assistant', message: assistantMsg, turnId: msg.turn_id });
+        }
+      }
+    }
+
+    // Orphan messages (no turn_id — legacy or streaming)
+    for (const msg of orphanMessages) {
+      result.push({ type: msg.role === 'user' ? 'user' : 'assistant', message: msg });
+    }
+
+    return result;
+  }, [messages, activities]);
+
   const ActiveIcon = PROVIDER_ICONS[activeProvider];
 
   if (!activeProject) {
@@ -622,35 +703,49 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
             <p>Ask the agent to do something...</p>
           </div>
         )}
-        {messages.map((msg, i) => {
-          const time = msg.created_at
-            ? parseDbDate(msg.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-            : '';
-          return (
-            <div key={i} className={`message message-${msg.role}`}>
-              <div className="message-content">
-                <MarkdownRenderer content={msg.content || ''} />
-                {msg.role === 'user' && (
-                  <div className="message-content-meta">
-                    <button
-                      className="message-copy-btn"
-                      onClick={() => navigator.clipboard.writeText(msg.content)}
-                      title="Copy message"
-                    >
-                      <Copy size={12} />
-                    </button>
-                    <span className="message-time">{time}</span>
-                  </div>
-                )}
-                {msg.role === 'assistant' && msg.metadata && (
-                  <AgentMessageMeta
-                    metadata={msg.metadata}
-                    content={msg.content}
-                  />
-                )}
+        {timeline.map((item, i) => {
+          if (item.type === 'user' || item.type === 'assistant') {
+            const msg = item.message;
+            const time = msg.created_at
+              ? parseDbDate(msg.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+              : '';
+            return (
+              <div key={`msg-${msg.id ?? i}`} className={`message message-${msg.role}`}>
+                <div className="message-content">
+                  <MarkdownRenderer content={msg.content || ''} />
+                  {msg.role === 'user' && (
+                    <div className="message-content-meta">
+                      <button
+                        className="message-copy-btn"
+                        onClick={() => navigator.clipboard.writeText(msg.content)}
+                        title="Copy message"
+                      >
+                        <Copy size={12} />
+                      </button>
+                      <span className="message-time">{time}</span>
+                    </div>
+                  )}
+                  {msg.role === 'assistant' && msg.metadata && (
+                    <AgentMessageMeta
+                      metadata={msg.metadata}
+                      content={msg.content}
+                    />
+                  )}
+                </div>
               </div>
-            </div>
-          );
+            );
+          }
+          if (item.type === 'worklog') {
+            const hasRunning = item.activities!.some((a) => a.status === 'running');
+            return (
+              <WorkLog
+                key={`wl-${item.turnId ?? i}`}
+                activities={item.activities!}
+                isRunning={hasRunning}
+              />
+            );
+          }
+          return null;
         })}
         {isGenerating && !streamingContent && (
           <div className="thinking-indicator">
