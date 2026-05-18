@@ -85,6 +85,20 @@ export default function App() {
     }
   }, [activeProject, loadThreads]);
 
+  // Listen for thread rename events from ChatPanel auto-rename
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.threadId && activeProject) {
+        loadThreads(activeProject.id);
+        // Update active thread title if it's the renamed one
+        setActiveThread(prev => prev?.id === detail.threadId ? { ...prev, title: detail.title } as Thread : prev);
+      }
+    };
+    window.addEventListener('thread:renamed', handler);
+    return () => window.removeEventListener('thread:renamed', handler);
+  }, [activeProject, loadThreads]);
+
   const handleAddProject = async () => {
     const projectPath = await window.electronAPI.dialog.openDirectory();
     if (!projectPath) return;

@@ -1126,6 +1126,8 @@ textarea {
   background: transparent;
   border-color: transparent;
   padding: 4px 0;
+  max-width: 100%;
+  width: 100%;
 }
 
 .message-text {
@@ -1138,6 +1140,11 @@ textarea {
   align-items: center;
   gap: 8px;
   align-self: flex-end;
+}
+
+.message-content-meta.assistant-meta {
+  align-self: flex-start;
+  margin-top: 4px;
 }
 
 .message-time {

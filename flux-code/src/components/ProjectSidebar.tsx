@@ -74,7 +74,7 @@ function saveOptions(opts: SidebarOptions) {
 }
 
 function formatDateTime(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = new Date(dateStr + 'Z');
   const now = new Date();
   const isToday = date.toDateString() === now.toDateString();
   const isYesterday = new Date(now.getTime() - 86400000).toDateString() === date.toDateString();

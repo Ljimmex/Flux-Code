@@ -22,6 +22,7 @@ import { ProviderSessionError, generateEventId } from './types';
 export class ProviderService {
   private eventHandlers = new Set<(event: ProviderRuntimeEvent) => void>();
   private unsubAdapterFns: Array<() => void> = [];
+  private registeredAdapters = new Set<string>();
 
   constructor(
     private registry: ProviderAdapterRegistry,
@@ -102,6 +103,8 @@ export class ProviderService {
 
   /** Call once for every adapter you want to listen to. */
   registerAdapterEvents(adapter: import('./ProviderAdapter').ProviderAdapterShape) {
+    if (this.registeredAdapters.has(adapter.provider)) return;
+    this.registeredAdapters.add(adapter.provider);
     this.attachAdapterEvents(adapter);
   }
 
