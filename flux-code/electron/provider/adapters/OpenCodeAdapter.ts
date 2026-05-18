@@ -180,12 +180,8 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
 
     const args: string[] = ['run', '--model', fullModelId, prompt];
 
-    if (state.variant && this.modelCache) {
-      const modelMeta = this.modelCache.find((m) => m.id === state.model);
-      const variantCfg = modelMeta?.variants?.[state.variant];
-      if (variantCfg && Object.keys(variantCfg).length > 0) {
-        args.push('--options', JSON.stringify(variantCfg));
-      }
+    if (state.variant) {
+      args.push('--variant', state.variant);
     }
 
     console.log('[OpenCodeAdapter] Spawning:', this.binaryPath, args.join(' '));
