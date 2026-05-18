@@ -208,7 +208,9 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
     });
 
     const rl = createInterface({ input: proc.stdout! });
-    rl.on('line', (line) => {
+    rl.on('line', (rawLine) => {
+      // Strip ANSI escape codes (e.g. [0m, [91m) so markdown parsers work correctly
+      const line = rawLine.replace(/\x1b\[[0-9;]*m/g, '');
       console.log('[OpenCodeAdapter] stdout line:', line);
       stdoutAccum += line + '\n';
       if (line.trim()) {
@@ -256,6 +258,7 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
 
     proc.on('exit', (code) => {
       console.log('[OpenCodeAdapter] proc exit code:', code, 'stderr:', stderrAccum.trim() || '(empty)', 'stdout:', stdoutAccum.trim() || '(empty)');
+      console.log('[OpenCodeAdapter] stdout raw (first 300 chars):', JSON.stringify(stdoutAccum.slice(0, 300)));
       if (code !== 0 && code !== null) {
         this.emit({
           id: generateEventId(),

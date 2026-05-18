@@ -59,10 +59,13 @@ interface MarkdownRendererProps {
 }
 
 export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
+  // Debug: log raw content and remarkGfm status
+  console.log('[MarkdownRenderer] remarkGfm type:', typeof remarkGfm, 'content length:', content.length, 'first 200 chars:', JSON.stringify(content.slice(0, 200)));
   return (
     <div className="markdown-body">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={remarkGfm ? [remarkGfm] : []}
+        allowedElements={undefined}
         components={{
           code(props) {
             const { children, className, node, ...rest } = props;
