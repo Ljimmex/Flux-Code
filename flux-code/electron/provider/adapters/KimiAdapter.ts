@@ -178,14 +178,8 @@ export class KimiAdapter implements ProviderAdapterShape {
   async startSession(input: ProviderSessionStartInput): Promise<ProviderSession> {
     const now = new Date().toISOString();
 
-    this.emit({
-      id: generateEventId(),
-      kind: 'session',
-      provider: 'kimi',
-      threadId: input.threadId,
-      createdAt: now,
-      method: 'session/connecting',
-    });
+    // Note: session/connecting and session/ready are emitted by ProviderService
+    // via ProviderSessionDirectory. Adapter should NOT emit them to avoid duplicates.
 
     const proc = spawn(this.binaryPath, ['acp'], {
       cwd: input.cwd,
@@ -268,15 +262,6 @@ export class KimiAdapter implements ProviderAdapterShape {
     if (sessionRes.models?.availableModels) {
       session.models = sessionRes.models.availableModels.map((m) => m.modelId);
     }
-
-    this.emit({
-      id: generateEventId(),
-      kind: 'session',
-      provider: 'kimi',
-      threadId: input.threadId,
-      createdAt: new Date().toISOString(),
-      method: 'session/ready',
-    });
 
     return {
       provider: 'kimi',
@@ -500,24 +485,53 @@ export class KimiAdapter implements ProviderAdapterShape {
     const session = this.sessions.get(threadId);
     if (!session) return;
 
-    // Handle response to pending request
-    if ('id' in msg && typeof msg.id === 'number') {
+    // Incoming request from agent (has id + method, but not a response to our request)
+    if ('id' in msg && typeof msg.id === 'number' && 'method' in msg) {
       const pending = session.pendingReqs.get(msg.id);
       if (pending) {
+        // It's a response to our pending request
         session.pendingReqs.delete(msg.id);
         if ('error' in msg && (msg as JsonRpcResponse).error) {
           pending.reject(new Error((msg as JsonRpcResponse).error!.message));
         } else {
           pending.resolve((msg as JsonRpcResponse).result);
         }
+      } else {
+        // It's an incoming request FROM the agent (e.g. session/request_permission)
+        this.handleAgentRequest(threadId, msg as JsonRpcRequest);
       }
       return;
     }
 
-    // Handle notifications
+    // Handle notifications (no id)
     if ('method' in msg && !('id' in msg)) {
       this.handleNotification(threadId, msg as JsonRpcNotification);
     }
+  }
+
+  private handleAgentRequest(threadId: number, req: JsonRpcRequest) {
+    const session = this.sessions.get(threadId);
+    if (!session) return;
+
+    if (req.method === 'session/request_permission') {
+      const resp = {
+        jsonrpc: '2.0',
+        id: req.id,
+        result: {
+          outcome: { outcome: 'selected', optionId: 'allow-once' },
+        },
+      };
+      session.process.stdin!.write(JSON.stringify(resp) + '\n');
+      return;
+    }
+
+    // Unknown request — respond with method not found
+    const resp = {
+      jsonrpc: '2.0',
+      id: req.id,
+      error: { code: -32601, message: `Method not found: ${req.method}` },
+    };
+    session.process.stdin!.write(JSON.stringify(resp) + '\n');
   }
 
   private handleNotification(threadId: number, notif: JsonRpcNotification) {

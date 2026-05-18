@@ -15,7 +15,7 @@ export const PROVIDER_INSTALL_COMMANDS: Record<ProviderKind, string | undefined>
   claudeCode: 'npm install -g @anthropic-ai/claude-code@latest',
   opencode: 'npm install -g opencode-ai@latest',
   ollama: undefined,
-  kimi: 'npm install -g kimi-cli@latest',
+  kimi: 'uv tool upgrade kimi-cli --no-cache',
   gemini: 'npm install -g @google/gemini-cli@latest',
 };
 
@@ -39,6 +39,33 @@ function fetchNpmLatestVersion(packageName: string): Promise<string | undefined>
             const json = JSON.parse(data);
             if (typeof json.version === 'string') {
               resolve(json.version);
+            } else {
+              resolve(undefined);
+            }
+          } catch {
+            resolve(undefined);
+          }
+        });
+      })
+      .on('error', () => resolve(undefined))
+      .on('timeout', () => resolve(undefined));
+  });
+}
+
+function fetchPypiLatestVersion(packageName: string): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const url = `https://pypi.org/pypi/${encodeURIComponent(packageName)}/json`;
+    https
+      .get(url, { timeout: 10_000 }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            if (typeof json.info?.version === 'string') {
+              resolve(json.info.version);
             } else {
               resolve(undefined);
             }
@@ -77,15 +104,23 @@ export async function checkProviderUpdates(
 
   await Promise.all(
     entries.map(async ([kind, status]) => {
-      const pkg = PROVIDER_NPM_PACKAGES[kind];
       const currentRaw = status?.version;
-      if (!pkg || !currentRaw) {
-        result[kind] = { current: currentRaw, hasUpdate: false };
+      if (!currentRaw) {
+        result[kind] = { current: undefined, hasUpdate: false };
         return;
       }
 
       const current = extractSemver(currentRaw);
-      const latest = await fetchNpmLatestVersion(pkg);
+      let latest: string | undefined;
+
+      if (kind === 'kimi') {
+        latest = await fetchPypiLatestVersion('kimi-cli');
+      } else {
+        const pkg = PROVIDER_NPM_PACKAGES[kind];
+        if (pkg) {
+          latest = await fetchNpmLatestVersion(pkg);
+        }
+      }
 
       if (!current || !latest) {
         result[kind] = { current: currentRaw, latest, hasUpdate: false };
