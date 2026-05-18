@@ -89,14 +89,8 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
   async startSession(input: ProviderSessionStartInput): Promise<ProviderSession> {
     const now = new Date().toISOString();
 
-    this.emit({
-      id: generateEventId(),
-      kind: 'session',
-      provider: 'opencode',
-      threadId: input.threadId,
-      createdAt: now,
-      method: 'session/connecting',
-    });
+    // Note: session/connecting and session/ready are emitted by ProviderService
+    // via ProviderSessionDirectory. Adapter should NOT emit them to avoid duplicates.
 
     const model = input.model ?? 'deepseek-v4-flash-free';
 
@@ -106,15 +100,6 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
       cwd: input.cwd ?? '.',
       runtimeMode: input.runtimeMode,
       variant: input.providerOptions?.opencode?.variant as string | undefined,
-    });
-
-    this.emit({
-      id: generateEventId(),
-      kind: 'session',
-      provider: 'opencode',
-      threadId: input.threadId,
-      createdAt: new Date().toISOString(),
-      method: 'session/ready',
     });
 
     return {
@@ -201,10 +186,99 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
 
     let stdoutAccum = '';
     let stderrAccum = '';
-    proc.stderr?.on('data', (data) => {
-      const chunk = data.toString();
-      stderrAccum += chunk;
-      console.log('[OpenCodeAdapter] stderr:', chunk.trim());
+    const openToolIds = new Set<string>();
+
+    // Parse stderr for synthetic tool events (OpenCode doesn't emit structured events)
+    const stderrRl = createInterface({ input: proc.stderr! });
+    stderrRl.on('line', (rawLine) => {
+      const line = rawLine.replace(/\x1b\[[0-9;]*m/g, '').trim();
+      if (!line) return;
+      stderrAccum += line + '\n';
+      console.log('[OpenCodeAdapter] stderr:', line);
+
+      // → Read <path>
+      const readMatch = line.match(/^→\s*Read\s+(.+)$/i);
+      if (readMatch) {
+        const path = readMatch[1].trim();
+        const toolId = `read-${path}`;
+        openToolIds.add(toolId);
+        this.emit({
+          id: generateEventId(),
+          kind: 'notification',
+          provider: 'opencode',
+          threadId: input.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'item/tool/started',
+          turnId,
+          itemId: toolId,
+          toolName: 'read_file',
+          payload: { path, command: line },
+        });
+        return;
+      }
+
+      // → Edit <path>  or  → Write <path>
+      const editMatch = line.match(/^→\s*(?:Edit|Write)\s+(.+)$/i);
+      if (editMatch) {
+        const path = editMatch[1].trim();
+        const toolId = `edit-${path}`;
+        openToolIds.add(toolId);
+        this.emit({
+          id: generateEventId(),
+          kind: 'notification',
+          provider: 'opencode',
+          threadId: input.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'item/tool/started',
+          turnId,
+          itemId: toolId,
+          toolName: 'str_replace_editor',
+          payload: { path, command: line },
+        });
+        return;
+      }
+
+      // ✱ Glob "<pattern>" N matches
+      const globMatch = line.match(/^✱\s*Glob\s+"(.+?)"\s+(.+)$/i);
+      if (globMatch) {
+        const pattern = globMatch[1];
+        const toolId = `glob-${pattern}`;
+        openToolIds.add(toolId);
+        this.emit({
+          id: generateEventId(),
+          kind: 'notification',
+          provider: 'opencode',
+          threadId: input.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'item/tool/started',
+          turnId,
+          itemId: toolId,
+          toolName: 'bash',
+          payload: { command: line },
+        });
+        return;
+      }
+
+      // → Bash <cmd>  or  → Run <cmd>
+      const runMatch = line.match(/^→\s*(?:Bash|Run|Shell)\s+(.+)$/i);
+      if (runMatch) {
+        const cmd = runMatch[1].trim();
+        const toolId = `run-${cmd}`;
+        openToolIds.add(toolId);
+        this.emit({
+          id: generateEventId(),
+          kind: 'notification',
+          provider: 'opencode',
+          threadId: input.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'item/tool/started',
+          turnId,
+          itemId: toolId,
+          toolName: 'bash',
+          payload: { command: line },
+        });
+        return;
+      }
     });
 
     const rl = createInterface({ input: proc.stdout! });
@@ -245,6 +319,22 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
     const emitCompleted = () => {
       if (completedEmitted) return;
       completedEmitted = true;
+
+      // Close all open synthetic tool events
+      for (const itemId of openToolIds) {
+        this.emit({
+          id: generateEventId(),
+          kind: 'notification',
+          provider: 'opencode',
+          threadId: input.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'item/tool/completed',
+          turnId,
+          itemId,
+        });
+      }
+      openToolIds.clear();
+
       this.emit({
         id: generateEventId(),
         kind: 'notification',
