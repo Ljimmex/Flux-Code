@@ -81,6 +81,7 @@ export interface ProviderRuntimeEvent {
   requestId?: string;
   requestKind?: string;
   textDelta?: string;
+  toolName?: string;
   payload?: unknown;
 }
 
@@ -207,7 +208,7 @@ export const FALLBACK_MODELS: Record<ProviderKind, string[]> = {
     'trinity-large-preview-free',
   ],
   ollama: ['llama3.3', 'llama3.2', 'mistral'],
-  kimi: ['kimi-k2.6', 'kimi-k2.5'],
+  kimi: ['kimi-code/kimi-for-coding', 'kimi-code/kimi-for-coding,thinking'],
   gemini: ['gemini-2.5-pro', 'gemini-2.5-flash'],
 };
 
@@ -216,7 +217,7 @@ export const DEFAULT_MODEL: Record<ProviderKind, string> = {
   claudeCode: 'claude-sonnet-4-6',
   opencode: 'deepseek-v4-flash-free',
   ollama: 'llama3.3',
-  kimi: 'kimi-k2.6',
+  kimi: 'kimi-code/kimi-for-coding',
   gemini: 'gemini-2.5-pro',
 };
 
