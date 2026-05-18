@@ -18,7 +18,11 @@ function CodeBlock({
 
   useEffect(() => {
     if (codeRef.current) {
-      hljs.highlightElement(codeRef.current);
+      try {
+        hljs.highlightElement(codeRef.current);
+      } catch {
+        // Fallback: leave as plain text if highlight.js doesn't know the language
+      }
     }
   }, [children]);
 

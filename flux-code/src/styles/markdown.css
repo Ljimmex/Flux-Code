@@ -49,6 +49,14 @@
   padding-left: 22px;
 }
 
+.markdown-body ul { list-style-type: disc; }
+.markdown-body ol { list-style-type: decimal; }
+
+.markdown-body ul ul { list-style-type: circle; }
+.markdown-body ul ul ul { list-style-type: square; }
+.markdown-body ol ol { list-style-type: lower-alpha; }
+.markdown-body ol ol ol { list-style-type: lower-roman; }
+
 .markdown-body li {
   margin-bottom: 3px;
 }
@@ -78,6 +86,12 @@
 
 .markdown-body blockquote p:last-child {
   margin-bottom: 0;
+}
+
+/* Strikethrough (GFM) */
+.markdown-body del {
+  text-decoration: line-through;
+  opacity: 0.7;
 }
 
 /* Horizontal rule */
