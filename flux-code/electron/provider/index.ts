@@ -47,6 +47,8 @@ function broadcastUpdates(updates: Record<string, import('./updateChecker').Prov
 }
 
 const turnAccumulator = new Map<string, string>();
+const turnStartTimes = new Map<string, number>();
+const lastDelta = new Map<string, string>();
 
 export async function initProviders(win: BrowserWindow, db?: DatabaseManager): Promise<void> {
   mainWindow = win;
@@ -74,7 +76,20 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
       if (event.kind === 'notification' && event.method === 'item/agentMessage/delta') {
         if (event.turnId && event.textDelta) {
           const key = `${event.threadId}:${event.turnId}`;
+          // Deduplicate: skip if same delta was just added (protects against duplicate listeners)
+          const prev = lastDelta.get(key);
+          if (prev !== undefined && prev === event.textDelta) {
+            return;
+          }
+          lastDelta.set(key, event.textDelta);
           turnAccumulator.set(key, (turnAccumulator.get(key) || '') + event.textDelta);
+        }
+        return;
+      }
+      if (event.kind === 'notification' && event.method === 'turn/started') {
+        if (event.turnId) {
+          const key = `${event.threadId}:${event.turnId}`;
+          turnStartTimes.set(key, Date.now());
         }
         return;
       }
@@ -82,16 +97,22 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
         if (event.turnId) {
           const key = `${event.threadId}:${event.turnId}`;
           const content = turnAccumulator.get(key) || '';
+          const startTime = turnStartTimes.get(key);
+          const durationMs = startTime ? Date.now() - startTime : 0;
+          const endTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
           console.log('[Provider] turn/completed, thread:', event.threadId, 'accumulated length:', content.length);
           if (content) {
             try {
-              db.addMessage(event.threadId, 'assistant', content);
+              const metadata = JSON.stringify({ endTime, durationMs });
+              db.addMessage(event.threadId, 'assistant', content, metadata);
               console.log('[Provider] Saved assistant message to DB, thread:', event.threadId);
             } catch (e: any) {
               console.error('[Provider] Failed to save assistant message:', e.message);
             }
           }
           turnAccumulator.delete(key);
+          turnStartTimes.delete(key);
+          lastDelta.delete(key);
         }
         return;
       }

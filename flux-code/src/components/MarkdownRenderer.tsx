@@ -58,14 +58,44 @@ interface MarkdownRendererProps {
   content: string;
 }
 
+/** Normalize malformed markdown tables from LLM output.
+ *  Fixes separators with wrong column count (e.g. header has 2 cols, separator has 3).
+ */
+function normalizeMarkdownTables(md: string): string {
+  const lines = md.split('\n');
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Detect table separator line: starts with |, contains only |, -, :, spaces
+    if (/^\s*\|[-\s:|]+\|\s*$/.test(line)) {
+      // Find the preceding table header (non-empty line starting with |)
+      let headerIdx = i - 1;
+      while (headerIdx >= 0 && !lines[headerIdx].trim().startsWith('|')) {
+        headerIdx--;
+      }
+      if (headerIdx >= 0) {
+        const headerCols = lines[headerIdx].split('|').filter((s) => s.trim() !== '').length;
+        const sepParts = line.split('|').filter((s) => s.trim() !== '');
+        if (sepParts.length !== headerCols) {
+          // Rebuild separator to match header column count
+          const sepCell = '---';
+          const newSep = '| ' + Array(headerCols).fill(sepCell).join(' | ') + ' |';
+          out.push(newSep);
+          continue;
+        }
+      }
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
 export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
-  // Debug: log raw content and remarkGfm status
-  console.log('[MarkdownRenderer] remarkGfm type:', typeof remarkGfm, 'content length:', content.length, 'first 200 chars:', JSON.stringify(content.slice(0, 200)));
+  const normalized = normalizeMarkdownTables(content);
   return (
     <div className="markdown-body">
       <ReactMarkdown
         remarkPlugins={remarkGfm ? [remarkGfm] : []}
-        allowedElements={undefined}
         components={{
           code(props) {
             const { children, className, node, ...rest } = props;
@@ -98,7 +128,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
           },
         }}
       >
-        {content}
+        {normalized}
       </ReactMarkdown>
     </div>
   );

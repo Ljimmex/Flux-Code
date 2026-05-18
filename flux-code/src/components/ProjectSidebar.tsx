@@ -73,8 +73,16 @@ function saveOptions(opts: SidebarOptions) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(opts));
 }
 
+function parseDbDate(dateStr: string): Date {
+  // Handle both SQLite format ('2026-05-18 10:43:56') and ISO format ('2026-05-18T10:43:56Z')
+  if (dateStr.includes('T') && (dateStr.endsWith('Z') || dateStr.endsWith('+00:00'))) {
+    return new Date(dateStr);
+  }
+  return new Date(dateStr.replace(' ', 'T') + 'Z');
+}
+
 function formatDateTime(dateStr: string): string {
-  const date = new Date(dateStr + 'Z');
+  const date = parseDbDate(dateStr);
   const now = new Date();
   const isToday = date.toDateString() === now.toDateString();
   const isYesterday = new Date(now.getTime() - 86400000).toDateString() === date.toDateString();

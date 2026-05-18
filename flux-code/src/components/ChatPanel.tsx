@@ -24,6 +24,13 @@ const ACCESS_LEVELS = [
 const VARIANTS = ['Low', 'Medium', 'High'] as const;
 const AGENTS = ['Build', 'Plan'] as const;
 
+function parseDbDate(dateStr: string): Date {
+  if (dateStr.includes('T') && (dateStr.endsWith('Z') || dateStr.endsWith('+00:00'))) {
+    return new Date(dateStr);
+  }
+  return new Date(dateStr.replace(' ', 'T') + 'Z');
+}
+
 function generateThreadTitle(firstMessage: string): string {
   const clean = firstMessage.trim().replace(/\s+/g, ' ');
   if (clean.length <= 40) return clean;
@@ -36,6 +43,43 @@ function formatDuration(ms: number): string {
   const secs = seconds % 60;
   if (mins > 0) return `${mins}m ${secs}s`;
   return `${secs}s`;
+}
+
+function AgentMessageMeta({ metadata, content }: { metadata: string; content: string }) {
+  const [hovered, setHovered] = useState(false);
+  const [copied, setCopied] = useState(false);
+  let parsed: { endTime?: string; durationMs?: number } = {};
+  try {
+    parsed = JSON.parse(metadata);
+  } catch {
+    return null;
+  }
+  if (!parsed.endTime) return null;
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div
+      className="message-content-meta assistant-meta"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <span className="message-time">{parsed.endTime} • {formatDuration(parsed.durationMs ?? 0)}</span>
+      {hovered && (
+        <button
+          className="message-copy-btn"
+          onClick={handleCopy}
+          title="Copy raw markdown"
+        >
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+        </button>
+      )}
+    </div>
+  );
 }
 
 // Model option definitions aligned with T3 Code
@@ -229,7 +273,6 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
   const [errorToast, setErrorToast] = useState<string | null>(null);
   const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState('');
-  const [turnTiming, setTurnTiming] = useState<{ endTime: string; durationMs: number } | null>(null);
 
   const [openDropdown, setOpenDropdown] = useState<null | 'model' | 'access' | 'variant'>(null);
   const [modelSearch, setModelSearch] = useState('');
@@ -422,11 +465,6 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     const handleTurnCompleted = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (activeThread && detail?.threadId === activeThread.id) {
-        const now = new Date();
-        const endTimeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        const durationMs = generationStartTime ? now.getTime() - generationStartTime : 0;
-        setTurnTiming({ endTime: endTimeStr, durationMs });
-
         window.electronAPI.chat.getMessages(activeThread.id).then((msgs) => {
           setMessages(msgs);
           setIsGenerating(false);
@@ -586,7 +624,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
         )}
         {messages.map((msg, i) => {
           const time = msg.created_at
-            ? new Date(msg.created_at + 'Z').toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            ? parseDbDate(msg.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
             : '';
           return (
             <div key={i} className={`message message-${msg.role}`}>
@@ -604,10 +642,11 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
                     <span className="message-time">{time}</span>
                   </div>
                 )}
-                {msg.role === 'assistant' && i === messages.length - 1 && turnTiming && (
-                  <div className="message-content-meta assistant-meta">
-                    <span className="message-time">{turnTiming.endTime} • {formatDuration(turnTiming.durationMs)}</span>
-                  </div>
+                {msg.role === 'assistant' && msg.metadata && (
+                  <AgentMessageMeta
+                    metadata={msg.metadata}
+                    content={msg.content}
+                  />
                 )}
               </div>
             </div>
