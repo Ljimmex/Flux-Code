@@ -6,8 +6,13 @@ import MainPanel from './components/MainPanel';
 import TopBar from './components/TopBar';
 import SearchModal from './components/SearchModal';
 import SettingsPanel, { initTheme, loadShortcuts, type ShortcutId, type Section, type SettingsPanelHandle } from './components/SettingsPanel';
+import ProviderUpdateToast from './components/ProviderUpdateToast';
 import { useProviderEvents } from './hooks/useProviderEvents';
+import { useProviderStore } from './stores/providerStore';
+import type { ProviderKind } from './types/provider';
 import './styles/global.css';
+import './styles/markdown.css';
+import 'highlight.js/styles/github-dark.min.css';
 
 export interface Project {
   id: number;
@@ -37,6 +42,7 @@ export interface Thread {
 export default function App() {
   useProviderEvents();
 
+  const { availableUpdates } = useProviderStore();
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -47,6 +53,7 @@ export default function App() {
   const settingsPanelRef = useRef<SettingsPanelHandle>(null);
   const [archivedThreads, setArchivedThreads] = useState<Thread[]>([]);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [dismissedUpdates, setDismissedUpdates] = useState<Set<string>>(new Set());
 
   const loadProjects = useCallback(async () => {
     const list = await window.electronAPI.db.getProjects();
@@ -248,6 +255,34 @@ export default function App() {
           onClose={() => setSearchOpen(false)}
         />
       )}
+
+      {/* Provider update toasts */}
+      <div className="provider-update-toast-container">
+        <AnimatePresence>
+          {(Object.entries(availableUpdates) as [ProviderKind, { hasUpdate: boolean }][])
+            .filter(([kind, info]) => info.hasUpdate && !dismissedUpdates.has(kind))
+            .map(([kind, info]) => (
+              <motion.div
+                key={kind}
+                initial={{ opacity: 0, x: 60, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 60, scale: 0.95 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+              >
+                <ProviderUpdateToast
+                  kind={kind}
+                  current={(info as any).current ?? ''}
+                  latest={(info as any).latest ?? ''}
+                  onDismiss={() => setDismissedUpdates(prev => new Set([...prev, kind]))}
+                  onOpenSettings={() => {
+                    setView('settings');
+                    setSettingsSection('providers');
+                  }}
+                />
+              </motion.div>
+            ))}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

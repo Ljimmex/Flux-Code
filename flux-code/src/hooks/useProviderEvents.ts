@@ -7,7 +7,7 @@ import { useProviderStore } from '../stores/providerStore';
  * Mount once in the root component (App.tsx).
  */
 export function useProviderEvents() {
-  const { setStatus, setModels, appendStreamChunk, endStreaming, setError } = useProviderStore();
+  const { setStatus, setModels, appendStreamChunk, endStreaming, setError, setAvailableUpdates, setModelVariants, activeModel, setModelOptions, providerDrafts } = useProviderStore();
 
   useEffect(() => {
     // Load initial statuses and models
@@ -20,6 +20,27 @@ export function useProviderEvents() {
       Object.entries(models).forEach(([kind, list]) => {
         setModels(kind as any, list);
       });
+      // Fetch OpenCode model variants if opencode models are present
+      if (models['opencode'] && models['opencode'].length > 0) {
+        window.electronAPI.provider.getOpenCodeModels().then((meta) => {
+          meta.forEach((m) => {
+            if (m.variants) {
+              setModelVariants(m.id, m.variants);
+            }
+          });
+          // Auto-select first variant for current model only if none is set yet
+          const currentVariant = (providerDrafts['opencode']?.modelOptions as Record<string, unknown> | undefined)?.variant as string | undefined;
+          if (!currentVariant) {
+            const currentMeta = meta.find((m) => m.id === activeModel);
+            if (currentMeta?.variants) {
+              const keys = Object.keys(currentMeta.variants);
+              if (keys.length > 0) {
+                setModelOptions('opencode', { variant: keys[0] });
+              }
+            }
+          }
+        }).catch(() => {});
+      }
     });
 
     const unsubEvent = window.electronAPI.onProviderEvent((event) => {
@@ -33,6 +54,7 @@ export function useProviderEvents() {
 
       if (event.kind === 'notification' && event.method === 'turn/completed') {
         endStreaming();
+        window.dispatchEvent(new CustomEvent('provider:turn-completed', { detail: { threadId: event.threadId } }));
         return;
       }
 
@@ -56,12 +78,44 @@ export function useProviderEvents() {
 
     const unsubModels = window.electronAPI.onProviderModels(({ kind, models }) => {
       setModels(kind as any, models);
+      if (kind === 'opencode' && models.length > 0) {
+        window.electronAPI.provider.getOpenCodeModels().then((meta) => {
+          meta.forEach((m) => {
+            if (m.variants) {
+              setModelVariants(m.id, m.variants);
+            }
+          });
+          // Only update variant if none is set yet (avoid overriding user choice on periodic refresh)
+          const currentVariant = (providerDrafts['opencode']?.modelOptions as Record<string, unknown> | undefined)?.variant as string | undefined;
+          if (!currentVariant) {
+            const currentMeta = meta.find((m) => m.id === activeModel);
+            if (currentMeta?.variants) {
+              const keys = Object.keys(currentMeta.variants);
+              if (keys.length > 0) {
+                setModelOptions('opencode', { variant: keys[0] });
+              }
+            }
+          }
+        }).catch(() => {});
+      }
+    });
+
+    const unsubUpdates = window.electronAPI.onProviderUpdates((updates) => {
+      setAvailableUpdates(updates);
+    });
+
+    // Check for CLI updates on startup
+    window.electronAPI.provider.checkUpdates().then((updates) => {
+      setAvailableUpdates(updates);
+    }).catch(() => {
+      // ignore
     });
 
     return () => {
       unsubEvent();
       unsubStatus();
       unsubModels();
+      unsubUpdates();
     };
   }, []);
 }

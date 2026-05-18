@@ -32,9 +32,14 @@ function createWindow(): void {
     },
   });
 
-  if (isDev) {
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-  }
+  // Always open DevTools in development; F12/Ctrl+Shift+I also works
+  mainWindow.webContents.openDevTools({ mode: 'detach' });
+
+  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
+      mainWindow?.webContents.toggleDevTools();
+    }
+  });
 
   const loadApp = async () => {
     if (isDev) {
@@ -115,7 +120,7 @@ app.whenReady().then(() => {
   createTray();
   initChat(dbManager);
   if (mainWindow) {
-    initProviders(mainWindow);
+    initProviders(mainWindow, dbManager);
   }
 
   globalShortcut.register('CommandOrControl+Shift+C', () => {

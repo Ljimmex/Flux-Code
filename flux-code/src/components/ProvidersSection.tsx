@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useProviderStore } from '../stores/providerStore';
 import { PROVIDER_DISPLAY_NAMES, PROVIDER_AUTH_INSTRUCTIONS, type ProviderKind } from '../types/provider';
 import {
-  RefreshCw, ChevronDown, AlertCircle,
+  RefreshCw, ChevronDown, AlertCircle, ArrowUpCircle,
   CodexIcon, OllamaIcon, OpenCodeIcon, ClaudeIcon, KimiIcon, GeminiIcon,
 } from './icons';
+import ProviderUpdateModal from './ProviderUpdateModal';
 
 type StatusKind = 'not-installed' | 'not-authenticated' | 'ready' | 'error';
 
@@ -80,8 +81,19 @@ function EyeOffBtn({ onClick }: { onClick: () => void }) {
 
 const ACCENT_PRESETS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'];
 
+const PROVIDER_INSTALL_COMMANDS: Record<ProviderKind, string | undefined> = {
+  codex: 'npm install -g @openai/codex@latest',
+  claudeCode: 'npm install -g @anthropic-ai/claude-code@latest',
+  opencode: 'npm install -g opencode-ai@latest',
+  ollama: undefined,
+  kimi: 'npm install -g kimi-cli@latest',
+  gemini: 'npm install -g @google/gemini-cli@latest',
+};
+
 function ProviderCard({
   kind, status, models, expanded, onToggle, onProbe, enabled, onToggleEnabled,
+  updateInfo,
+  onOpenUpdate,
 }: {
   kind: ProviderKind;
   status: any;
@@ -91,6 +103,8 @@ function ProviderCard({
   onProbe: () => void;
   enabled: boolean;
   onToggleEnabled: () => void;
+  updateInfo?: { current?: string; latest?: string; hasUpdate: boolean };
+  onOpenUpdate: () => void;
 }) {
   const Icon = PROVIDER_ICONS[kind];
   const defaultDisplayName = PROVIDER_DISPLAY_NAMES[kind];
@@ -157,6 +171,12 @@ function ProviderCard({
             <span className="provider-name">
               {displayName}
               {status?.version && <span className="provider-version">{status.version}</span>}
+              {updateInfo?.hasUpdate && (
+                <button className="provider-update-badge" onClick={(e) => { e.stopPropagation(); onOpenUpdate(); }} title={`Update available: ${updateInfo.latest}`}>
+                  <ArrowUpCircle size={12} />
+                  <span>New</span>
+                </button>
+              )}
             </span>
             <span className="provider-status">
               {isReady
@@ -397,28 +417,45 @@ function ProviderCard({
 }
 
 export default function ProvidersSection() {
-  const { statuses, models, enabledProviders, toggleProvider } = useProviderStore();
+  const { statuses, models, enabledProviders, toggleProvider, availableUpdates, setAvailableUpdates } = useProviderStore();
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState(() => new Date());
+  const [updateModalProvider, setUpdateModalProvider] = useState<ProviderKind | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleProbe = async (kind: ProviderKind) => {
     await window.electronAPI.provider.probe(kind);
   };
 
   const handleRefreshAll = async () => {
-    for (const kind of ALL_PROVIDERS) {
-      await handleProbe(kind);
+    setIsRefreshing(true);
+    try {
+      for (const kind of ALL_PROVIDERS) {
+        await handleProbe(kind);
+      }
+    } finally {
+      setIsRefreshing(false);
+      setLastRefreshed(new Date());
+      // Re-check updates so badges disappear when CLIs are now up-to-date
+      try {
+        const updates = await window.electronAPI.provider.checkUpdates();
+        setAvailableUpdates(updates);
+      } catch {
+        // ignore
+      }
     }
-    setLastRefreshed(new Date());
   };
+
+  const activeUpdate = updateModalProvider ? availableUpdates[updateModalProvider] : undefined;
+  const activeCommand = updateModalProvider ? PROVIDER_INSTALL_COMMANDS[updateModalProvider] : undefined;
 
   return (
     <>
       <div className="settings-group-header">
         <span className="settings-group-title">Providers</span>
         <div className="settings-group-actions">
-          <span className="settings-group-meta">Refreshed {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-          <button className="settings-icon-btn" onClick={handleRefreshAll} title="Refresh all providers"><RefreshCw size={14} /></button>
+          <span className="settings-group-meta">Refreshed {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+          <button className={`settings-icon-btn ${isRefreshing ? 'spinning' : ''}`} onClick={handleRefreshAll} disabled={isRefreshing} title="Refresh all providers"><RefreshCw size={14} className={isRefreshing ? 'spin' : ''} /></button>
         </div>
       </div>
       <div className="providers-section">
@@ -433,9 +470,28 @@ export default function ProvidersSection() {
             onProbe={() => handleProbe(kind)}
             enabled={enabledProviders[kind] ?? true}
             onToggleEnabled={() => toggleProvider(kind)}
+            updateInfo={availableUpdates[kind]}
+            onOpenUpdate={() => setUpdateModalProvider(kind)}
           />
         ))}
       </div>
+
+      {updateModalProvider && activeUpdate?.hasUpdate && activeCommand && (
+        <ProviderUpdateModal
+          kind={updateModalProvider}
+          current={activeUpdate.current ?? 'unknown'}
+          latest={activeUpdate.latest ?? 'unknown'}
+          installCommand={activeCommand}
+          onClose={() => setUpdateModalProvider(null)}
+          onUpdate={async () => {
+            const result = await window.electronAPI.provider.updateCli(updateModalProvider);
+            if (result.success) {
+              await handleProbe(updateModalProvider);
+            }
+            return result;
+          }}
+        />
+      )}
     </>
   );
 }

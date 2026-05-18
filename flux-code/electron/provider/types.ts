@@ -114,6 +114,8 @@ export interface ProviderSessionStartInput {
       env?: Record<string, string>;
       effort?: 'low' | 'medium' | 'high';
       fastMode?: boolean;
+      variant?: string;
+      [key: string]: unknown;
     };
   };
   systemPrompt?: string;
@@ -185,7 +187,25 @@ export type ProviderStatus =
 export const FALLBACK_MODELS: Record<ProviderKind, string[]> = {
   codex: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'],
   claudeCode: ['claude-haiku-4-5', 'claude-sonnet-4-6', 'claude-opus-4-5', 'claude-opus-4-6', 'claude-opus-4-7'],
-  opencode: ['big-pickle', 'deepseek-v4-flash-free', 'minimax-m2.5-free', 'nemotron-3-super-free', 'qwen3.6-plus-free'],
+  opencode: [
+    'big-pickle',
+    'deepseek-v4-flash-free',
+    'glm-4.7-free',
+    'glm-5-free',
+    'grok-code',
+    'hy3-preview-free',
+    'kimi-k2.5-free',
+    'ling-2.6-flash-free',
+    'mimo-v2-flash-free',
+    'mimo-v2-omni-free',
+    'mimo-v2-pro-free',
+    'minimax-m2.1-free',
+    'minimax-m2.5-free',
+    'nemotron-3-super-free',
+    'qwen3.6-plus-free',
+    'ring-2.6-1t-free',
+    'trinity-large-preview-free',
+  ],
   ollama: ['llama3.3', 'llama3.2', 'mistral'],
   kimi: ['kimi-k2.6', 'kimi-k2.5'],
   gemini: ['gemini-2.5-pro', 'gemini-2.5-flash'],
@@ -194,7 +214,7 @@ export const FALLBACK_MODELS: Record<ProviderKind, string[]> = {
 export const DEFAULT_MODEL: Record<ProviderKind, string> = {
   codex: 'codex-mini-latest',
   claudeCode: 'claude-sonnet-4-6',
-  opencode: 'big-pickle',
+  opencode: 'deepseek-v4-flash-free',
   ollama: 'llama3.3',
   kimi: 'kimi-k2.6',
   gemini: 'gemini-2.5-pro',

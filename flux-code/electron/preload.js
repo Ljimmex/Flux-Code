@@ -42,8 +42,15 @@ const api = {
         sendTurn: (threadId, turnId, prompt, contextFiles) => ipcRenderer.invoke('provider:sendTurn', threadId, turnId, prompt, contextFiles),
         interruptTurn: (threadId) => ipcRenderer.invoke('provider:interruptTurn', threadId),
         respondToApproval: (threadId, requestId, approved) => ipcRenderer.invoke('provider:respondToApproval', threadId, requestId, approved),
+        respondToUserInput: (threadId, requestId, answers) => ipcRenderer.invoke('provider:respondToUserInput', threadId, requestId, answers),
         setBinaryPath: (kind, binaryPath) => ipcRenderer.invoke('provider:setBinaryPath', kind, binaryPath),
         stopSession: (threadId) => ipcRenderer.invoke('provider:stopSession', threadId),
+        listSessions: () => ipcRenderer.invoke('provider:listSessions'),
+        getCapabilities: (kind) => ipcRenderer.invoke('provider:getCapabilities', kind),
+        rollbackConversation: (threadId, numTurns) => ipcRenderer.invoke('provider:rollbackConversation', threadId, numTurns),
+        checkUpdates: () => ipcRenderer.invoke('provider:checkUpdates'),
+        updateCli: (kind) => ipcRenderer.invoke('provider:updateCli', kind),
+        getOpenCodeModels: () => ipcRenderer.invoke('provider:getOpenCodeModels'),
     },
     onChatToken: (callback) => {
         const handler = (_, data) => callback(data);
@@ -74,6 +81,11 @@ const api = {
         const handler = (_, data) => callback(data);
         ipcRenderer.on('provider:models', handler);
         return () => ipcRenderer.removeListener('provider:models', handler);
+    },
+    onProviderUpdates: (callback) => {
+        const handler = (_, updates) => callback(updates);
+        ipcRenderer.on('provider:updates', handler);
+        return () => ipcRenderer.removeListener('provider:updates', handler);
     },
     onNavigate: (callback) => {
         const handler = (_, path) => callback(path);

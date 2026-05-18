@@ -52,12 +52,12 @@ export class HealthService {
     const adapter = this.registry.get(kind);
     try {
       const status = await adapter.probe();
-      this.updateStatus(kind, status);
+      this.updateStatus(kind, status, true);
     } catch (err) {
       this.updateStatus(kind, {
         kind: 'error',
         message: err instanceof Error ? err.message : String(err),
-      });
+      }, true);
     }
   }
 
@@ -77,7 +77,7 @@ export class HealthService {
     );
   }
 
-  private updateStatus(kind: ProviderKind, status: ProviderStatus) {
+  private updateStatus(kind: ProviderKind, status: ProviderStatus, forceBroadcast = false) {
     const prev = this.statuses.get(kind);
     this.statuses.set(kind, status);
 
@@ -89,12 +89,12 @@ export class HealthService {
     if (Array.isArray(modelList) && modelList.length > 0) {
       const prevModels = this.modelCache.get(kind);
       this.modelCache.set(kind, modelList);
-      if (JSON.stringify(prevModels) !== JSON.stringify(modelList)) {
+      if (JSON.stringify(prevModels) !== JSON.stringify(modelList) || forceBroadcast) {
         this.onModelsChange(kind, modelList);
       }
     }
 
-    if (JSON.stringify(prev) !== JSON.stringify(status)) {
+    if (JSON.stringify(prev) !== JSON.stringify(status) || forceBroadcast) {
       this.onStatusChange(kind, status);
     }
   }

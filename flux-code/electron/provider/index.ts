@@ -1,9 +1,12 @@
 import { ipcMain, type BrowserWindow } from 'electron';
+import { spawn } from 'child_process';
 import { ProviderAdapterRegistry } from './ProviderAdapterRegistry';
 import { ProviderSessionDirectory } from './ProviderSessionDirectory';
 import { HealthService } from './HealthService';
 import { ProviderService } from './ProviderService';
 import type { ProviderKind, ProviderRuntimeEvent, ProviderStatus } from './types';
+import { checkProviderUpdates, PROVIDER_INSTALL_COMMANDS } from './updateChecker';
+import type { DatabaseManager } from '../db';
 
 import { CodexAdapter } from './adapters/CodexAdapter';
 import { ClaudeAdapter } from './adapters/ClaudeAdapter';
@@ -19,6 +22,7 @@ let directory: ProviderSessionDirectory;
 let mainWindow: BrowserWindow | null = null;
 
 function broadcast(event: ProviderRuntimeEvent) {
+  console.log('[Provider] broadcast event:', event.kind, event.method, 'thread:', (event as any).threadId);
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('provider:event', event);
   }
@@ -36,7 +40,15 @@ function broadcastModels(kind: ProviderKind, models: string[]) {
   }
 }
 
-export async function initProviders(win: BrowserWindow): Promise<void> {
+function broadcastUpdates(updates: Record<string, import('./updateChecker').ProviderUpdateInfo>) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('provider:updates', updates);
+  }
+}
+
+const turnAccumulator = new Map<string, string>();
+
+export async function initProviders(win: BrowserWindow, db?: DatabaseManager): Promise<void> {
   mainWindow = win;
 
   // 1. Create infrastructure layers (aligned with T3 Code)
@@ -55,6 +67,36 @@ export async function initProviders(win: BrowserWindow): Promise<void> {
 
   // 3. Forward provider runtime events to renderer
   providerService.onEvent(broadcast);
+
+  // 3b. Persist messages to DB (accumulate assistant text, save on turn/completed)
+  if (db) {
+    providerService.onEvent((event) => {
+      if (event.kind === 'notification' && event.method === 'item/agentMessage/delta') {
+        if (event.turnId && event.textDelta) {
+          const key = `${event.threadId}:${event.turnId}`;
+          turnAccumulator.set(key, (turnAccumulator.get(key) || '') + event.textDelta);
+        }
+        return;
+      }
+      if (event.kind === 'notification' && event.method === 'turn/completed') {
+        if (event.turnId) {
+          const key = `${event.threadId}:${event.turnId}`;
+          const content = turnAccumulator.get(key) || '';
+          console.log('[Provider] turn/completed, thread:', event.threadId, 'accumulated length:', content.length);
+          if (content) {
+            try {
+              db.addMessage(event.threadId, 'assistant', content);
+              console.log('[Provider] Saved assistant message to DB, thread:', event.threadId);
+            } catch (e: any) {
+              console.error('[Provider] Failed to save assistant message:', e.message);
+            }
+          }
+          turnAccumulator.delete(key);
+        }
+        return;
+      }
+    });
+  }
 
   // 4. IPC handlers
   ipcMain.handle('provider:getStatuses', () => healthService.getAllStatuses());
@@ -106,6 +148,9 @@ export async function initProviders(win: BrowserWindow): Promise<void> {
   });
 
   ipcMain.handle('provider:sendTurn', async (_, threadId: number, turnId: string, prompt: string, contextFiles?: string[]) => {
+    if (db) {
+      try { db.addMessage(threadId, 'user', prompt); } catch {}
+    }
     await providerService.sendTurn({
       threadId,
       input: prompt,
@@ -151,8 +196,66 @@ export async function initProviders(win: BrowserWindow): Promise<void> {
     await providerService.rollbackConversation({ threadId, numTurns });
   });
 
+  ipcMain.handle('provider:getOpenCodeModels', async () => {
+    const adapter = registry.get('opencode') as any;
+    if (adapter && typeof adapter.getCachedModels === 'function') {
+      return adapter.getCachedModels() as import('../model').OpenCodeModel[];
+    }
+    return [];
+  });
+
+  ipcMain.handle('provider:checkUpdates', async () => {
+    const statuses = healthService.getAllStatuses();
+    const updates = await checkProviderUpdates(statuses);
+    broadcastUpdates(updates);
+    return updates;
+  });
+
+  ipcMain.handle('provider:updateCli', async (_, kind: ProviderKind) => {
+    const cmd = PROVIDER_INSTALL_COMMANDS[kind];
+    if (!cmd) return { success: false, error: 'No install command for this provider.' };
+
+    return new Promise<{ success: boolean; error?: string }>((resolve) => {
+      const args = cmd.split(' ').filter(Boolean);
+      const cmdName = args.shift()!;
+      const proc = spawn(cmdName, args, {
+        shell: process.platform === 'win32',
+        timeout: 120_000,
+      });
+
+      let stderr = '';
+      proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+
+      proc.on('error', (err) => {
+        resolve({ success: false, error: err.message });
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true });
+        } else {
+          resolve({ success: false, error: stderr || `Exited with code ${code}` });
+        }
+      });
+    });
+  });
+
   // 5. Start health probes
   await healthService.start();
+
+  // 6. Check for CLI updates after a short delay so statuses are populated
+  setTimeout(async () => {
+    try {
+      const statuses = healthService.getAllStatuses();
+      const updates = await checkProviderUpdates(statuses);
+      const hasAny = Object.values(updates).some((u) => u.hasUpdate);
+      if (hasAny) {
+        broadcastUpdates(updates);
+      }
+    } catch {
+      // ignore
+    }
+  }, 5_000);
 }
 
 export async function cleanupProviders(): Promise<void> {

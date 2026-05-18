@@ -6,7 +6,8 @@ import {
 import logo from '../Fluxavatar.png';
 import type { Thread, Project } from '../App';
 import { useProviderStore, type ProviderDraft } from '../stores/providerStore';
-import type { ProviderKind } from '../types/provider';
+import { DEFAULT_MODEL, type ProviderKind } from '../types/provider';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface Props {
   activeThread: Thread | null;
@@ -86,6 +87,11 @@ function ModelOptionsLabel({
     if (opts?.fastMode) tags.push('Fast');
     return <span>{tags.join(' · ')} · {agent}</span>;
   }
+  if (provider === 'opencode') {
+    const opts = modelOptions as { variant?: string } | undefined;
+    const variant = opts?.variant;
+    return <span>{variant ? `${variant} · ` : ''}{agent}</span>;
+  }
   return <span>Medium · {agent}</span>;
 }
 
@@ -123,6 +129,37 @@ function CodexOptions({
         </button>
       </div>
     </>
+  );
+}
+
+function OpenCodeVariantOptions({
+  modelId,
+  selectedVariant,
+  onChange,
+}: {
+  modelId: string;
+  selectedVariant: string | undefined;
+  onChange: (variant: string | undefined) => void;
+}) {
+  const { modelVariants } = useProviderStore();
+  const variants = modelVariants[modelId];
+  const variantKeys = variants ? Object.keys(variants) : [];
+  if (variantKeys.length === 0) return null;
+
+  return (
+    <div className="dropdown-section">
+      <div className="dropdown-section-label">Variant</div>
+      {variantKeys.map((v) => (
+        <button
+          key={v}
+          className={`toolbar-dropdown-item ${selectedVariant === v ? 'active' : ''}`}
+          onClick={() => onChange(v)}
+        >
+          <span className="capitalize">{v}</span>
+          {selectedVariant === v && <Check size={14} />}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -176,6 +213,8 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [errorToast, setErrorToast] = useState<string | null>(null);
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState('');
 
   const [openDropdown, setOpenDropdown] = useState<null | 'model' | 'access' | 'variant'>(null);
   const [modelSearch, setModelSearch] = useState('');
@@ -188,6 +227,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     activeProvider, activeModel,
     providerDrafts,
     envVars, serverUrls, serverPasswords,
+    statuses,
     setActiveProvider, setActiveModel, setModelMeta, setModelOptions,
     streamingContent: storeStreamingContent,
     isStreaming: storeIsStreaming,
@@ -208,15 +248,28 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
   const [dropdownProvider, setDropdownProvider] = useState<ProviderKind>(activeProvider);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
 
+  // If activeProvider is disabled, switch to first enabled one
+  useEffect(() => {
+    if (!enabledProvidersList.includes(activeProvider) && enabledProvidersList.length > 0) {
+      const first = enabledProvidersList[0];
+      setActiveProvider(first);
+      setActiveModel(providerModels[first]?.[0] ?? DEFAULT_MODEL[first]);
+    }
+  }, [enabledProvidersList, activeProvider, setActiveProvider, setActiveModel, providerModels]);
+
   // Sync dropdown provider when it opens
   useEffect(() => {
     if (openDropdown === 'model') {
-      setDropdownProvider(activeProvider);
+      // Ensure we start from an enabled provider
+      const startProvider = enabledProvidersList.includes(activeProvider)
+        ? activeProvider
+        : (enabledProvidersList[0] ?? activeProvider);
+      setDropdownProvider(startProvider);
       setHighlightedIndex(0);
       setModelSearch('');
       setTimeout(() => searchInputRef.current?.focus(), 0);
     }
-  }, [openDropdown, activeProvider]);
+  }, [openDropdown, activeProvider, enabledProvidersList]);
 
   const currentModels = useMemo(() => {
     const list = providerModels[dropdownProvider] ?? [];
@@ -313,12 +366,28 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     }
   }, [storeStreamingContent, storeIsStreaming]);
 
+  // Timer for generation duration
+  useEffect(() => {
+    if (!isGenerating || !generationStartTime) {
+      setElapsedTime('');
+      return;
+    }
+    const interval = setInterval(() => {
+      const sec = Math.floor((Date.now() - generationStartTime) / 1000);
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      setElapsedTime(m > 0 ? `${m}m ${s}s` : `${s}s`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isGenerating, generationStartTime]);
+
   useEffect(() => {
     if (storeError) {
       setErrorToast(storeError);
       setIsGenerating(false);
       generatingRef.current = false;
       setStreamingContent('');
+      setGenerationStartTime(null);
       endStreaming();
       setTimeout(() => { setErrorToast(null); setError(null); }, 5000);
     }
@@ -333,6 +402,23 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     window.electronAPI.chat.getMessages(activeThread.id).then(setMessages);
   }, [activeThread?.id]);
 
+  // Reload messages when provider turn completes (backend saved assistant message to DB)
+  useEffect(() => {
+    const handleTurnCompleted = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (activeThread && detail?.threadId === activeThread.id) {
+        window.electronAPI.chat.getMessages(activeThread.id).then((msgs) => {
+          setMessages(msgs);
+          setIsGenerating(false);
+          generatingRef.current = false;
+          setStreamingContent('');
+        });
+      }
+    };
+    window.addEventListener('provider:turn-completed', handleTurnCompleted);
+    return () => window.removeEventListener('provider:turn-completed', handleTurnCompleted);
+  }, [activeThread?.id]);
+
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
@@ -345,15 +431,36 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
 
   const handleSend = async () => {
     if (!input.trim() || !activeThread || generatingRef.current) return;
+
+    // Check provider status before sending
+    const providerStatus = statuses[activeProvider];
+    if (providerStatus?.kind === 'not-installed') {
+      setErrorToast(`${PROVIDER_LABELS[activeProvider]} is not installed. Check provider settings.`);
+      setTimeout(() => setErrorToast(null), 5000);
+      return;
+    }
+    if (providerStatus?.kind === 'not-authenticated') {
+      setErrorToast(`${PROVIDER_LABELS[activeProvider]} is not authenticated. Run: ${providerStatus.installCmd}`);
+      setTimeout(() => setErrorToast(null), 5000);
+      return;
+    }
+    if (providerStatus?.kind === 'error') {
+      setErrorToast(`${PROVIDER_LABELS[activeProvider]} error: ${providerStatus.message}`);
+      setTimeout(() => setErrorToast(null), 5000);
+      return;
+    }
+
     const text = input.trim();
     setInput('');
     setIsGenerating(true);
     generatingRef.current = true;
     setStreamingContent('');
+    setGenerationStartTime(Date.now());
 
     // Optimistically add user message to UI
     setMessages(prev => [...prev, { role: 'user', content: text }]);
 
+    console.log('[ChatPanel] Sending via provider:', activeProvider, 'model:', activeModel, 'thread:', activeThread.id);
     try {
       const runtimeMode = selectedAccess === 'full' ? 'full-access' : 'approval-required';
       await window.electronAPI.provider.startSession({
@@ -372,6 +479,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
       const turnId = `turn_${Date.now()}`;
       await window.electronAPI.provider.sendTurn(activeThread.id, turnId, text);
     } catch (err: any) {
+      console.error('[ChatPanel] Failed to send message:', err);
       setErrorToast(err.message || 'Failed to send message');
       setIsGenerating(false);
       generatingRef.current = false;
@@ -385,6 +493,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     setIsGenerating(false);
     generatingRef.current = false;
     setStreamingContent('');
+    setGenerationStartTime(null);
     endStreaming();
   };
 
@@ -452,7 +561,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
           return (
             <div key={i} className={`message message-${msg.role}`}>
               <div className="message-content">
-                <span className="message-text">{msg.content}</span>
+                <MarkdownRenderer content={msg.content || ''} />
                 {msg.role === 'user' && (
                   <div className="message-content-meta">
                     <button
@@ -469,10 +578,21 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
             </div>
           );
         })}
+        {isGenerating && !streamingContent && (
+          <div className="thinking-indicator">
+            <span className="thinking-dots">
+              <span className="dot">.</span>
+              <span className="dot">.</span>
+              <span className="dot">.</span>
+            </span>
+            <span className="thinking-text">Working</span>
+            {elapsedTime && <span className="thinking-timer">({elapsedTime})</span>}
+          </div>
+        )}
         {isGenerating && streamingContent && (
           <div className="message message-assistant">
             <div className="message-content">
-              <span className="message-text">{streamingContent}</span>
+              <MarkdownRenderer content={streamingContent} />
             </div>
           </div>
         )}
@@ -623,7 +743,14 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
                         onChange={(opts) => setModelOptions('claudeCode', opts)}
                       />
                     )}
-                    {activeProvider !== 'codex' && activeProvider !== 'claudeCode' && (
+                    {activeProvider === 'opencode' && (
+                      <OpenCodeVariantOptions
+                        modelId={activeModel}
+                        selectedVariant={(activeModelOptions as Record<string, unknown>)?.variant as string | undefined}
+                        onChange={(variant) => setModelOptions('opencode', { ...activeModelOptions, variant })}
+                      />
+                    )}
+                    {activeProvider !== 'codex' && activeProvider !== 'claudeCode' && activeProvider !== 'opencode' && (
                       <div className="dropdown-section">
                         <div className="dropdown-section-label">Reasoning</div>
                         {VARIANTS.map(v => (

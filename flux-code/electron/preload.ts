@@ -49,6 +49,9 @@ export interface ElectronAPI {
     listSessions: () => Promise<any[]>;
     getCapabilities: (kind: string) => Promise<any>;
     rollbackConversation: (threadId: number, numTurns: number) => Promise<void>;
+    checkUpdates: () => Promise<Record<string, { current?: string; latest?: string; hasUpdate: boolean }>>;
+    updateCli: (kind: string) => Promise<{ success: boolean; error?: string }>;
+    getOpenCodeModels: () => Promise<{ id: string; name: string; providerID: string; variants?: Record<string, Record<string, unknown>> }[]>;
   };
   onChatToken: (callback: (data: { threadId: number; token: string }) => void) => () => void;
   onChatDone: (callback: (data: { threadId: number }) => void) => () => void;
@@ -56,6 +59,7 @@ export interface ElectronAPI {
   onProviderEvent: (callback: (event: any) => void) => () => void;
   onProviderStatus: (callback: (data: { kind: string; status: any }) => void) => () => void;
   onProviderModels: (callback: (data: { kind: string; models: string[] }) => void) => () => void;
+  onProviderUpdates: (callback: (updates: Record<string, { current?: string; latest?: string; hasUpdate: boolean }>) => void) => () => void;
   onNavigate: (callback: (path: string) => void) => () => void;
 }
 
@@ -108,6 +112,9 @@ const api: ElectronAPI = {
     listSessions: () => ipcRenderer.invoke('provider:listSessions'),
     getCapabilities: (kind) => ipcRenderer.invoke('provider:getCapabilities', kind),
     rollbackConversation: (threadId, numTurns) => ipcRenderer.invoke('provider:rollbackConversation', threadId, numTurns),
+    checkUpdates: () => ipcRenderer.invoke('provider:checkUpdates'),
+    updateCli: (kind) => ipcRenderer.invoke('provider:updateCli', kind),
+    getOpenCodeModels: () => ipcRenderer.invoke('provider:getOpenCodeModels'),
   },
   onChatToken: (callback) => {
     const handler = (_: any, data: any) => callback(data);
@@ -138,6 +145,11 @@ const api: ElectronAPI = {
     const handler = (_: any, data: any) => callback(data);
     ipcRenderer.on('provider:models', handler);
     return () => ipcRenderer.removeListener('provider:models', handler);
+  },
+  onProviderUpdates: (callback) => {
+    const handler = (_: any, updates: any) => callback(updates);
+    ipcRenderer.on('provider:updates', handler);
+    return () => ipcRenderer.removeListener('provider:updates', handler);
   },
   onNavigate: (callback) => {
     const handler = (_: any, path: string) => callback(path);

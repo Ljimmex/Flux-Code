@@ -160,6 +160,10 @@ interface ProviderState {
   isStreaming: boolean;
   // Error toast
   error: string | null;
+  // Available CLI updates per provider
+  availableUpdates: Record<string, { current?: string; latest?: string; hasUpdate: boolean }>;
+  // Model variants per modelId (used by OpenCode)
+  modelVariants: Record<string, Record<string, Record<string, unknown>> | undefined>;
 
   // Actions
   setStatus: (kind: ProviderKind, status: ProviderStatus) => void;
@@ -183,6 +187,8 @@ interface ProviderState {
   appendStreamChunk: (turnId: string, text: string) => void;
   endStreaming: () => void;
   setError: (error: string | null) => void;
+  setAvailableUpdates: (updates: Record<string, { current?: string; latest?: string; hasUpdate: boolean }>) => void;
+  setModelVariants: (modelId: string, variants: Record<string, Record<string, unknown>> | undefined) => void;
 }
 
 export const useProviderStore = create<ProviderState>((set) => ({
@@ -197,12 +203,14 @@ export const useProviderStore = create<ProviderState>((set) => ({
   envVars: loadEnv(),
   serverUrls: loadRecord(SERVER_URLS_KEY),
   serverPasswords: loadRecord(SERVER_PASSWORDS_KEY),
-  activeProvider: 'ollama',
-  activeModel: DEFAULT_MODEL['ollama'],
+  activeProvider: 'opencode',
+  activeModel: DEFAULT_MODEL['opencode'],
   streamingTurnId: null,
   streamingContent: '',
   isStreaming: false,
   error: null,
+  availableUpdates: {},
+  modelVariants: {},
 
   setStatus: (kind, status) =>
     set((s) => ({ statuses: { ...s.statuses, [kind]: status } })),
@@ -330,21 +338,48 @@ export const useProviderStore = create<ProviderState>((set) => ({
   setActiveProvider: (kind) =>
     set((s) => {
       const available = s.models[kind] ?? [];
-      const draft = s.providerDrafts[kind];
-      const desiredModel = draft?.model ?? DEFAULT_MODEL[kind];
+      const draft = s.providerDrafts[kind] ?? {};
+      const desiredModel = draft.model ?? DEFAULT_MODEL[kind];
       const activeModel = available.includes(desiredModel) ? desiredModel : (available[0] ?? DEFAULT_MODEL[kind]);
+      // Auto-select first variant if the model has variants and none is set
+      const variants = s.modelVariants[activeModel];
+      const variantKeys = variants ? Object.keys(variants) : [];
+      const currentVariant = (draft.modelOptions as Record<string, unknown> | undefined)?.variant as string | undefined;
+      const nextOptions: Record<string, unknown> = { ...((draft.modelOptions as Record<string, unknown>) ?? {}) };
+      if (variantKeys.length > 0 && !currentVariant) {
+        nextOptions.variant = variantKeys[0];
+      } else if (variantKeys.length === 0) {
+        delete nextOptions.variant;
+      }
+      const nextDrafts = {
+        ...s.providerDrafts,
+        [kind]: { ...draft, model: activeModel, modelOptions: nextOptions },
+      };
+      saveDrafts(nextDrafts);
       return {
         activeProvider: kind,
         activeModel,
+        providerDrafts: nextDrafts,
       };
     }),
 
   setActiveModel: (model) =>
     set((s) => {
       const kind = s.activeProvider;
+      const draft = s.providerDrafts[kind] ?? {};
+      // Auto-select first variant if the model has variants and none is set
+      const variants = s.modelVariants[model];
+      const variantKeys = variants ? Object.keys(variants) : [];
+      const currentVariant = (draft.modelOptions as Record<string, unknown> | undefined)?.variant as string | undefined;
+      const nextOptions: Record<string, unknown> = { ...((draft.modelOptions as Record<string, unknown>) ?? {}) };
+      if (variantKeys.length > 0 && !currentVariant) {
+        nextOptions.variant = variantKeys[0];
+      } else if (variantKeys.length === 0) {
+        delete nextOptions.variant;
+      }
       const nextDrafts = {
         ...s.providerDrafts,
-        [kind]: { ...s.providerDrafts[kind], model },
+        [kind]: { ...draft, model, modelOptions: nextOptions },
       };
       saveDrafts(nextDrafts);
       return { activeModel: model, providerDrafts: nextDrafts };
@@ -365,4 +400,11 @@ export const useProviderStore = create<ProviderState>((set) => ({
     }),
 
   setError: (error) => set({ error }),
+
+  setAvailableUpdates: (updates) => set({ availableUpdates: updates }),
+
+  setModelVariants: (modelId, variants) =>
+    set((s) => ({
+      modelVariants: { ...s.modelVariants, [modelId]: variants },
+    })),
 }));

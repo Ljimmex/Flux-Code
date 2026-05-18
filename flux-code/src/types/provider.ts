@@ -19,7 +19,7 @@ export type ProviderStatus =
 export const DEFAULT_MODEL: Record<ProviderKind, string> = {
   codex: 'gpt-5.3-codex',
   claudeCode: 'claude-sonnet-4-6',
-  opencode: 'big-pickle',
+  opencode: 'opencode/deepseek-v4-flash-free',
   ollama: 'llama3.3',
   kimi: 'kimi-k2.6',
   gemini: 'gemini-2.5-pro',

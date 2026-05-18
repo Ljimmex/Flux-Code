@@ -139,30 +139,34 @@ export function probeClaudeCapabilities(binaryPath: string): ClaudeCapabilities 
 export interface OpenCodeModel {
   id: string; // "provider/model-id"
   name: string;
-  provider: string;
+  providerID: string;
   contextSize?: number;
+  variants?: Record<string, Record<string, unknown>>;
 }
 
 export const OPENCODE_MINIMUM_VERSION = '1.14.19';
 
-/** Default models bundled with OpenCode CLI (shown when dynamic fetch fails). */
+/** OpenCode Zen built-in free models (aligned with `opencode models` CLI output).
+ *  CLI returns full provider/model IDs.
+ */
 export const OPENCODE_DEFAULT_MODELS: OpenCodeModel[] = [
-  { id: 'big-pickle', name: 'Big Pickle', provider: 'opencode' },
-  { id: 'deepseek-v4-flash-free', name: 'DeepSeek V4 Flash Free', provider: 'opencode' },
-  { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', provider: 'opencode' },
-  { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', provider: 'opencode' },
-  { id: 'qwen3.6-plus-free', name: 'Qwen3.6 Plus Free', provider: 'opencode' },
+  { id: 'opencode/big-pickle', name: 'Big Pickle', providerID: 'opencode' },
+  { id: 'opencode/deepseek-v4-flash-free', name: 'DeepSeek V4 Flash Free', providerID: 'opencode' },
+  { id: 'opencode/minimax-m2.5-free', name: 'MiniMax M2.5 Free', providerID: 'opencode' },
+  { id: 'opencode/nemotron-3-super-free', name: 'Nemotron 3 Super Free', providerID: 'opencode' },
+  { id: 'opencode/qwen3.6-plus-free', name: 'Qwen3.6 Plus Free', providerID: 'opencode' },
 ];
 
 /**
  * Fetch models from OpenCode CLI.
- * Tries `opencode models <provider>` and falls back to the static default list.
+ * `opencode models` outputs provider/model IDs one per line.
+ * Use --verbose for metadata if needed; plain list is sufficient for IDs.
  */
 export async function fetchOpenCodeModels(binaryPath: string): Promise<OpenCodeModel[]> {
   try {
     const { spawn } = await import('child_process');
     const result = await new Promise<string>((resolve, reject) => {
-      const proc = spawn(binaryPath, ['models', 'opencode'], {
+      const proc = spawn(binaryPath, ['models', 'opencode', '--verbose'], {
         timeout: 15_000,
         shell: process.platform === 'win32',
       });
@@ -180,25 +184,40 @@ export async function fetchOpenCodeModels(binaryPath: string): Promise<OpenCodeM
       });
     });
 
-    // Parse plain-text output line-by-line.
-    // We look for lines that start with an indented bullet or a model name.
-    const lines = result.split('\n');
+    console.log('[fetchOpenCodeModels] raw stdout:', result.trim().substring(0, 500));
+    const lines = result.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+
     const parsed: OpenCodeModel[] = [];
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      // Skip headers, help text, or lines that look like CLI flags
-      if (trimmed.startsWith('Options:') || trimmed.startsWith('-') || trimmed.startsWith('Positionals:')) continue;
-      if (trimmed.startsWith('opencode') || trimmed.startsWith('provider') || trimmed.startsWith('list')) continue;
-      // Heuristic: take the first token as the ID, rest as name
-      const parts = trimmed.split(/\s{2,}/); // split on 2+ spaces
-      const id = parts[0].toLowerCase().replace(/\s+/g, '-');
-      const name = parts.length > 1 ? parts[0] : parts[0];
-      if (id && !parsed.find((m) => m.id === id)) {
-        parsed.push({ id, name: name || id, provider: 'opencode' });
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Model ID lines look like "provider/model" without quotes/braces/leading spaces
+      const isModelId = /^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/.test(line);
+      if (!isModelId) continue;
+      // Next lines are the JSON metadata block until the next model ID
+      const jsonLines: string[] = [];
+      let j = i + 1;
+      while (j < lines.length && !/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/.test(lines[j])) {
+        jsonLines.push(lines[j]);
+        j++;
       }
+      try {
+        const meta = JSON.parse(jsonLines.join('\n')) as any;
+        const [providerID, ...idParts] = line.split('/');
+        const id = line; // keep full provider/model form
+        const name = meta.name || idParts.join('/');
+        const variants = meta.variants && Object.keys(meta.variants).length > 0
+          ? (meta.variants as Record<string, Record<string, unknown>>)
+          : undefined;
+        parsed.push({ id, name, providerID, variants });
+      } catch {
+        // fallback to plain ID parsing if JSON fails
+        const [providerID, ...idParts] = line.split('/');
+        parsed.push({ id: line, name: idParts.join('/'), providerID });
+      }
+      i = j - 1;
     }
 
+    console.log('[fetchOpenCodeModels] parsed models:', parsed.map((m) => m.id));
     return parsed.length > 0 ? parsed : OPENCODE_DEFAULT_MODELS;
   } catch {
     return OPENCODE_DEFAULT_MODELS;
