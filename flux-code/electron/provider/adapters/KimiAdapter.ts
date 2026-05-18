@@ -15,6 +15,7 @@ import type {
   ProviderUserInputAnswers,
 } from '../types';
 import { generateEventId, generateTurnId } from '../types';
+import { getCliVersion } from '../../model';
 
 const KIMI_FALLBACK_MODELS = [
   'kimi-code/kimi-for-coding',
@@ -67,12 +68,13 @@ export class KimiAdapter implements ProviderAdapterShape {
   }
 
   async probe(): Promise<ProviderStatus> {
+    const version = getCliVersion(this.binaryPath);
     try {
       const opts = { timeout: 5_000, stdio: 'ignore' as const };
       if (process.platform === 'win32') (opts as any).shell = true;
       execSync(`${this.binaryPath} --version`, opts);
     } catch {
-      return { kind: 'not-installed', models: KIMI_FALLBACK_MODELS };
+      return { kind: 'not-installed', models: KIMI_FALLBACK_MODELS, version };
     }
 
     // Try a quick ACP initialize to check auth status
@@ -83,15 +85,17 @@ export class KimiAdapter implements ProviderAdapterShape {
           kind: 'not-authenticated',
           installCmd: 'kimi login',
           models: authCheck.models ?? KIMI_FALLBACK_MODELS,
+          version,
         };
       }
       return {
         kind: 'ready',
         models: authCheck?.models ?? KIMI_FALLBACK_MODELS,
+        version,
       };
     } catch {
       // If ACP probe fails, assume ready (CLI is installed)
-      return { kind: 'ready', models: KIMI_FALLBACK_MODELS };
+      return { kind: 'ready', models: KIMI_FALLBACK_MODELS, version };
     }
   }
 
