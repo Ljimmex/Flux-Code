@@ -184,7 +184,7 @@ export async function fetchOpenCodeModels(binaryPath: string): Promise<OpenCodeM
       });
     });
 
-    console.log('[fetchOpenCodeModels] raw stdout:', result.trim().substring(0, 500));
+    // Parse verbose output: model ID line followed by JSON block
     const lines = result.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
 
     const parsed: OpenCodeModel[] = [];
@@ -217,7 +217,7 @@ export async function fetchOpenCodeModels(binaryPath: string): Promise<OpenCodeM
       i = j - 1;
     }
 
-    console.log('[fetchOpenCodeModels] parsed models:', parsed.map((m) => m.id));
+    // Return parsed models or fallback defaults
     return parsed.length > 0 ? parsed : OPENCODE_DEFAULT_MODELS;
   } catch {
     return OPENCODE_DEFAULT_MODELS;

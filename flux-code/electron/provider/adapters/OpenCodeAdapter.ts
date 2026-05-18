@@ -74,7 +74,7 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
     // Fetch dynamic models via --json (aligned with T3 Code)
     const models = await fetchOpenCodeModels(this.binaryPath);
     this.modelCache = models;
-    console.log('[OpenCodeAdapter] opencode models returned:', models.map(m => ({ id: m.id, name: m.name, providerID: m.providerID })));
+    // Models cached for variant lookup
     if (models.length === 0) {
       return { kind: 'ready', models: [], version };
     }
