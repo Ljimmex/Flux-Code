@@ -36,11 +36,7 @@ const SERVER_URLS_KEY = 'flux:providers:serverUrls';
 const SERVER_PASSWORDS_KEY = 'flux:providers:serverPasswords';
 
 function loadEnabled(): Record<ProviderKind, boolean> {
-  try {
-    const raw = localStorage.getItem(ENABLED_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return {
+  const defaults: Record<ProviderKind, boolean> = {
     codex: true,
     claudeCode: true,
     opencode: true,
@@ -48,6 +44,15 @@ function loadEnabled(): Record<ProviderKind, boolean> {
     kimi: true,
     antigravity: true,
   };
+  try {
+    const raw = localStorage.getItem(ENABLED_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw) as Partial<Record<ProviderKind, boolean>>;
+      // Merge saved values over defaults so new providers appear automatically
+      return { ...defaults, ...saved };
+    }
+  } catch {}
+  return defaults;
 }
 
 function saveEnabled(enabled: Record<ProviderKind, boolean>) {

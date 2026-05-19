@@ -345,17 +345,25 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
       try {
         const event = JSON.parse(line);
         // OpenCode JSON events have a 'type' field
-        if (event.type === 'text' && event.content) {
-          this.emit({
-            id: generateEventId(),
-            kind: 'notification',
-            provider: 'opencode',
-            threadId: input.threadId,
-            createdAt: new Date().toISOString(),
-            method: 'item/agentMessage/delta',
-            turnId,
-            textDelta: event.content,
-          });
+        // step_start and step_finish are metadata — no visible text
+        if (event.type === 'step_start' || event.type === 'step_finish') {
+          return;
+        }
+
+        if (event.type === 'text') {
+          const textContent = event.content || event.part?.text;
+          if (textContent) {
+            this.emit({
+              id: generateEventId(),
+              kind: 'notification',
+              provider: 'opencode',
+              threadId: input.threadId,
+              createdAt: new Date().toISOString(),
+              method: 'item/agentMessage/delta',
+              turnId,
+              textDelta: textContent,
+            });
+          }
           return;
         }
         // Tool call events
@@ -413,6 +421,9 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
           }
           return;
         }
+
+        // Valid JSON we don't recognize — silently skip (don't emit raw JSON)
+        return;
       } catch {
         // Not JSON — treat as plain text output (fallback for default format)
       }
@@ -429,6 +440,20 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
         turnId,
         textDelta: line + '\n',
       });
+    });
+
+    let stdoutDone = false;
+    let processDone = false;
+
+    const tryEmitCompleted = () => {
+      if (stdoutDone && processDone) {
+        emitCompleted();
+      }
+    };
+
+    rl.on('close', () => {
+      stdoutDone = true;
+      tryEmitCompleted();
     });
 
     proc.on('error', (err) => {
@@ -491,7 +516,8 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
           message: `OpenCode exited with code ${code}. stderr: ${stderrAccum.trim() || '(empty)'}`,
         });
       }
-      emitCompleted();
+      processDone = true;
+      tryEmitCompleted();
       this.sessions.delete(input.threadId);
     });
 
