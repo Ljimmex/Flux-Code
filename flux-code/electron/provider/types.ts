@@ -210,7 +210,15 @@ export const FALLBACK_MODELS: Record<ProviderKind, string[]> = {
   ],
   ollama: ['llama3.3', 'llama3.2', 'mistral'],
   kimi: ['kimi-code/kimi-for-coding', 'kimi-code/kimi-for-coding,thinking'],
-  antigravity: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+  antigravity: [
+    'gemini-3.5-flash-high',
+    'gemini-3.5-flash-low',
+    'gemini-3.1-pro-high',
+    'gemini-3.1-pro-low',
+    'claude-sonnet-4.6-thinking',
+    'claude-opus-4.6-thinking',
+    'gpt-oss-120b-medium',
+  ],
 };
 
 export const DEFAULT_MODEL: Record<ProviderKind, string> = {

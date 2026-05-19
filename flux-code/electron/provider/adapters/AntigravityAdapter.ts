@@ -15,7 +15,15 @@ import type {
 } from '../types';
 import { generateEventId, generateTurnId } from '../types';
 
-const MODELS = ['gemini-2.5-pro', 'gemini-2.5-flash'];
+const MODELS = [
+  'gemini-3.5-flash-high',
+  'gemini-3.5-flash-low',
+  'gemini-3.1-pro-high',
+  'gemini-3.1-pro-low',
+  'claude-sonnet-4.6-thinking',
+  'claude-opus-4.6-thinking',
+  'gpt-oss-120b-medium',
+];
 
 /**
  * Antigravity CLI adapter.

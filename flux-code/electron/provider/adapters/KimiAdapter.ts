@@ -1,6 +1,7 @@
 import { type ChildProcess } from 'child_process';
 import { createInterface } from 'readline';
 import { spawnCli, probeBinary } from './spawnCli';
+import { getCliVersion } from '../../model';
 import type { ProviderAdapterShape } from '../ProviderAdapter';
 import type {
   ProviderKind,
@@ -44,8 +45,9 @@ export class KimiAdapter implements ProviderAdapterShape {
 
   async probe(): Promise<ProviderStatus> {
     const resolvedPath = probeBinary(this.binaryPath);
+    const version = getCliVersion(this.binaryPath);
     if (!resolvedPath) {
-      return { kind: 'not-installed', models: this.getFallbackModels() };
+      return { kind: 'not-installed', models: this.getFallbackModels(), version };
     }
 
     const apiKey = this.readApiKey();
@@ -53,9 +55,9 @@ export class KimiAdapter implements ProviderAdapterShape {
     const models = config.models.length > 0 ? config.models : this.getFallbackModels();
 
     if (!apiKey) {
-      return { kind: 'not-authenticated', installCmd: 'kimi login', models };
+      return { kind: 'not-authenticated', installCmd: 'kimi login', models, version };
     }
-    return { kind: 'ready', models };
+    return { kind: 'ready', models, version };
   }
 
   private getFallbackModels(): string[] {

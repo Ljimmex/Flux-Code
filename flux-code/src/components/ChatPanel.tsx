@@ -6,7 +6,7 @@ import {
 import logo from '../Fluxavatar.png';
 import type { Thread, Project } from '../App';
 import { useProviderStore, type ProviderDraft } from '../stores/providerStore';
-import { DEFAULT_MODEL, type ProviderKind } from '../types/provider';
+import { DEFAULT_MODEL, FALLBACK_MODELS, type ProviderKind } from '../types/provider';
 import type { ActivityItem } from '../types/activity';
 import ChatMarkdown from './ChatMarkdown';
 import { WorkLog } from './WorkLog';
@@ -341,7 +341,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
   }, [openDropdown, activeProvider, enabledProvidersList]);
 
   const currentModels = useMemo(() => {
-    const list = providerModels[dropdownProvider] ?? [];
+    const list = providerModels[dropdownProvider] ?? FALLBACK_MODELS[dropdownProvider] ?? [];
     if (!modelSearch) return list;
     return list.filter(m => m.toLowerCase().includes(modelSearch.toLowerCase()));
   }, [providerModels, dropdownProvider, modelSearch]);

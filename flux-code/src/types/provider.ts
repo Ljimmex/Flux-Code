@@ -34,6 +34,23 @@ export const PROVIDER_DISPLAY_NAMES: Record<ProviderKind, string> = {
   antigravity: 'Antigravity (Google)',
 };
 
+export const FALLBACK_MODELS: Record<ProviderKind, string[]> = {
+  codex: ['gpt-5.3-codex', 'gpt-5.2-codex'],
+  claudeCode: ['claude-sonnet-4-6', 'claude-opus-4-6'],
+  opencode: ['deepseek-v4-flash-free'],
+  ollama: ['llama3.3', 'mistral'],
+  kimi: ['kimi-k2.6'],
+  antigravity: [
+    'gemini-3.5-flash-high',
+    'gemini-3.5-flash-low',
+    'gemini-3.1-pro-high',
+    'gemini-3.1-pro-low',
+    'claude-sonnet-4.6-thinking',
+    'claude-opus-4.6-thinking',
+    'gpt-oss-120b-medium',
+  ],
+};
+
 export const PROVIDER_AUTH_INSTRUCTIONS: Record<ProviderKind, string[]> = {
   codex: ['npm install -g @openai/codex', 'codex login'],
   claudeCode: ['npm install -g @anthropic-ai/claude-code', 'claude auth login'],
