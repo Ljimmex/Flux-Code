@@ -154,10 +154,8 @@ interface ProviderState {
   // Active provider and model for new conversations
   activeProvider: ProviderKind;
   activeModel: string;
-  // Streaming state
-  streamingTurnId: string | null;
-  streamingContent: string;
-  isStreaming: boolean;
+  // Per-thread streaming state (allows multiple threads to stream concurrently)
+  streamingByThread: Record<number, { turnId: string; content: string }>;
   // Error toast
   error: string | null;
   // Available CLI updates per provider
@@ -184,8 +182,8 @@ interface ProviderState {
   setShadowHomePath: (kind: ProviderKind, path: string) => void;
   setActiveProvider: (kind: ProviderKind) => void;
   setActiveModel: (model: string) => void;
-  appendStreamChunk: (turnId: string, text: string) => void;
-  endStreaming: () => void;
+  appendStreamChunk: (threadId: number, turnId: string, text: string) => void;
+  endStreaming: (threadId: number) => void;
   setError: (error: string | null) => void;
   setAvailableUpdates: (updates: Record<string, { current?: string; latest?: string; hasUpdate: boolean }>) => void;
   setModelVariants: (modelId: string, variants: Record<string, Record<string, unknown>> | undefined) => void;
@@ -205,9 +203,7 @@ export const useProviderStore = create<ProviderState>((set) => ({
   serverPasswords: loadRecord(SERVER_PASSWORDS_KEY),
   activeProvider: 'opencode',
   activeModel: DEFAULT_MODEL['opencode'],
-  streamingTurnId: null,
-  streamingContent: '',
-  isStreaming: false,
+  streamingByThread: {},
   error: null,
   availableUpdates: {},
   modelVariants: {},
@@ -385,18 +381,23 @@ export const useProviderStore = create<ProviderState>((set) => ({
       return { activeModel: model, providerDrafts: nextDrafts };
     }),
 
-  appendStreamChunk: (turnId, text) =>
-    set((s) => ({
-      streamingTurnId: turnId,
-      streamingContent: s.streamingTurnId === turnId ? s.streamingContent + text : text,
-      isStreaming: true,
-    })),
+  appendStreamChunk: (threadId, turnId, text) =>
+    set((s) => {
+      const prev = s.streamingByThread[threadId];
+      const content = prev && prev.turnId === turnId ? prev.content + text : text;
+      return {
+        streamingByThread: {
+          ...s.streamingByThread,
+          [threadId]: { turnId, content },
+        },
+      };
+    }),
 
-  endStreaming: () =>
-    set({
-      streamingTurnId: null,
-      streamingContent: '',
-      isStreaming: false,
+  endStreaming: (threadId) =>
+    set((s) => {
+      const next = { ...s.streamingByThread };
+      delete next[threadId];
+      return { streamingByThread: next };
     }),
 
   setError: (error) => set({ error }),

@@ -18,6 +18,8 @@
     "pack": "npm run build && electron-builder"
   },
   "dependencies": {
+    "@pierre/diffs": "^1.1.22",
+    "@pierre/trees": "^1.0.0-beta.4",
     "better-sqlite3": "^12.0.0",
     "framer-motion": "^12.38.0",
     "openai": "^6.38.0",
@@ -26,6 +28,7 @@
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
+    "shiki": "^4.1.0",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

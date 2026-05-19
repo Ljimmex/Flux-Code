@@ -1,0 +1,139 @@
+/* ─── File Tree Component ─────────────────────────────────────────────── */
+
+.file-tree {
+  border: 1px solid var(--border, #30363d);
+  border-radius: 8px;
+  background: var(--bg-tertiary, #161b22);
+  overflow: hidden;
+  margin: 8px 0;
+}
+
+/* ─── Flat File List ──────────────────────────────────────────────────── */
+
+.file-list {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: var(--bg-tertiary, #161b22);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 8px;
+}
+
+.file-list-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 0;
+  color: var(--text-primary, #e6edf3);
+}
+
+.file-list-path {
+  color: var(--accent-hover, #79b8ff);
+  white-space: nowrap;
+}
+
+.file-list-desc {
+  color: var(--text-secondary, #8b949e);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-tree-title {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #8b949e);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border, #30363d);
+  background: var(--bg-secondary, #0d1117);
+}
+
+.file-tree-body {
+  padding: 4px 0;
+}
+
+.file-tree-node {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.file-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px 3px 8px;
+  cursor: pointer;
+  transition: background 0.1s;
+  user-select: none;
+}
+
+.file-tree-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.file-tree-row--folder {
+  font-weight: 500;
+}
+
+.file-tree-chevron {
+  display: inline-flex;
+  align-items: center;
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted, #8b949e);
+  flex-shrink: 0;
+}
+
+.file-tree-chevron-placeholder {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.file-tree-folder-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #58a6ff;
+  flex-shrink: 0;
+}
+
+.file-tree-file-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.file-tree-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary, #c9d1d9);
+}
+
+.file-tree-changes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.file-tree-added {
+  color: var(--success, #3fb950);
+}
+
+.file-tree-removed {
+  color: var(--destructive, #f85149);
+}
+
+.file-tree-children {
+  /* children are indented via inline padding-left on rows */
+}

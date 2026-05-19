@@ -45,6 +45,48 @@
   padding: 2px 0;
 }
 
+.work-log-show-more {
+  display: block;
+  width: 100%;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--primary, #58a6ff);
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--border, #30363d);
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s;
+}
+
+.work-log-show-more:hover {
+  color: var(--text-primary, #c9d1d9);
+}
+
+/* ─── Changed Files Badge ──────────────────────────────────────────────── */
+
+.changed-files-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  margin: 4px 48px 0 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary, #8b949e);
+  background: var(--bg-tertiary, #161b22);
+  border: 1px solid var(--border, #30363d);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.changed-files-badge:hover {
+  color: var(--text-primary, #c9d1d9);
+  border-color: var(--primary, #58a6ff);
+  background: var(--bg-hover, #21262d);
+}
+
 /* ─── Activity Row ─────────────────────────────────────────────────────── */
 
 .activity-row {
@@ -66,6 +108,10 @@
 
 .activity-row--error {
   color: var(--destructive, #f85149);
+}
+
+.activity-row--latest {
+  background: rgba(88, 166, 255, 0.08);
 }
 
 .activity-icon {
@@ -111,6 +157,129 @@
 @keyframes activity-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* ─── Diff Panel ───────────────────────────────────────────────────────── */
+
+.diff-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.diff-panel {
+  display: flex;
+  flex-direction: column;
+  width: 90vw;
+  height: 85vh;
+  max-width: 1200px;
+  background: var(--bg-secondary, #0d1117);
+  border: 1px solid var(--border, #30363d);
+  border-radius: var(--radius, 8px);
+  overflow: hidden;
+}
+
+.diff-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border, #30363d);
+  background: var(--bg-tertiary, #161b22);
+}
+
+.diff-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #c9d1d9);
+}
+
+.diff-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #8b949e);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.diff-panel-close:hover {
+  background: var(--bg-hover, #21262d);
+  color: var(--text-primary, #c9d1d9);
+}
+
+.diff-panel-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.diff-panel-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border, #30363d);
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--bg-tertiary, #161b22);
+}
+
+.diff-panel-file {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  margin-bottom: 2px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary, #8b949e);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.12s;
+}
+
+.diff-panel-file:hover {
+  background: var(--bg-hover, #21262d);
+  color: var(--text-primary, #c9d1d9);
+}
+
+.diff-panel-file.active {
+  background: rgba(88, 166, 255, 0.12);
+  color: var(--primary, #58a6ff);
+  font-weight: 500;
+}
+
+.diff-panel-content {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+}
+
+.diff-panel-loading,
+.diff-panel-error,
+.diff-panel-empty {
+  padding: 40px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted, #8b949e);
+}
+
+.diff-panel-error {
+  color: var(--destructive, #f85149);
 }
 
 /* ─── Responsive ───────────────────────────────────────────────────────── */

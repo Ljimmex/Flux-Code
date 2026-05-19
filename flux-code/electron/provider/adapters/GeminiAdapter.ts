@@ -36,6 +36,7 @@ export class GeminiAdapter implements ProviderAdapterShape {
     process: ChildProcess;
     turnId: string | null;
     abortCtrl: AbortController;
+    lastOutputTime: number;
   }>();
 
   private eventHandlers = new Set<(event: ProviderRuntimeEvent) => void>();
@@ -83,11 +84,14 @@ export class GeminiAdapter implements ProviderAdapterShape {
     });
 
     const abortCtrl = new AbortController();
-    this.sessions.set(input.threadId, { process: proc, turnId: null, abortCtrl });
+    this.sessions.set(input.threadId, { process: proc, turnId: null, abortCtrl, lastOutputTime: Date.now() });
 
     const rl = createInterface({ input: proc.stdout! });
     rl.on('line', (line) => {
       const session = this.sessions.get(input.threadId);
+      if (session) {
+        session.lastOutputTime = Date.now();
+      }
       if (session?.turnId && line.trim()) {
         this.emit({
           id: generateEventId(),
@@ -182,7 +186,7 @@ export class GeminiAdapter implements ProviderAdapterShape {
     const session = this.sessions.get(input.threadId);
     if (!session) throw new Error(`Session for thread ${input.threadId} not found`);
 
-    const turnId = generateTurnId();
+    const turnId = input.turnId || generateTurnId();
     session.turnId = turnId;
 
     this.emit({
@@ -198,8 +202,12 @@ export class GeminiAdapter implements ProviderAdapterShape {
     const prompt = (input.input ?? '') + '\n';
     session.process.stdin!.write(prompt);
 
-    setTimeout(() => {
-      if (session.turnId === turnId) {
+    // Emit turn/completed after idle timeout (no stdout for 15s)
+    const IDLE_TIMEOUT = 15000;
+    const checkIdle = setInterval(() => {
+      const s = this.sessions.get(input.threadId);
+      if (s && s.turnId === turnId && Date.now() - s.lastOutputTime > IDLE_TIMEOUT) {
+        clearInterval(checkIdle);
         this.emit({
           id: generateEventId(),
           kind: 'notification',
@@ -209,9 +217,9 @@ export class GeminiAdapter implements ProviderAdapterShape {
           method: 'turn/completed',
           turnId,
         });
-        session.turnId = null;
+        s.turnId = null;
       }
-    }, 100);
+    }, 1000);
 
     return { turnId };
   }

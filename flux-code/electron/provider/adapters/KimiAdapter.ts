@@ -1,6 +1,6 @@
-import { spawn, type ChildProcess } from 'child_process';
+import { type ChildProcess } from 'child_process';
 import { createInterface } from 'readline';
-import { execSync } from 'child_process';
+import { spawnCli, probeBinary } from './spawnCli';
 import type { ProviderAdapterShape } from '../ProviderAdapter';
 import type {
   ProviderKind,
@@ -15,45 +15,20 @@ import type {
   ProviderUserInputAnswers,
 } from '../types';
 import { generateEventId, generateTurnId } from '../types';
-import { getCliVersion } from '../../model';
-
-const KIMI_FALLBACK_MODELS = [
-  'kimi-code/kimi-for-coding',
-  'kimi-code/kimi-for-coding,thinking',
-];
 
 interface KimiSession {
-  process: ChildProcess;
-  sessionId: string;
+  process?: ChildProcess;
   turnId: string | null;
-  abortCtrl: AbortController;
-  models: string[];
-  pendingReqs: Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>;
-  reqId: number;
-}
-
-interface JsonRpcRequest {
-  jsonrpc: '2.0';
-  id: number;
-  method: string;
-  params?: unknown;
-}
-
-interface JsonRpcNotification {
-  jsonrpc: '2.0';
-  method: string;
-  params?: unknown;
-}
-
-interface JsonRpcResponse {
-  jsonrpc: '2.0';
-  id: number;
-  result?: unknown;
-  error?: { code: number; message: string; data?: unknown };
+  sessionId: string | null;
+  model: string;
+  cwd: string;
+  interactionMode: 'default' | 'plan';
+  toolNames: Map<string, string>;
 }
 
 /**
- * Kimi (Moonshot AI) adapter using `kimi acp` — Agent Client Protocol over stdio.
+ * Kimi (Moonshot AI) adapter.
+ * Uses `kimi --print --output-format stream-json` for non-interactive mode.
  */
 export class KimiAdapter implements ProviderAdapterShape {
   readonly provider: ProviderKind = 'kimi';
@@ -68,207 +43,47 @@ export class KimiAdapter implements ProviderAdapterShape {
   }
 
   async probe(): Promise<ProviderStatus> {
-    const version = getCliVersion(this.binaryPath);
-    try {
-      const opts = { timeout: 5_000, stdio: 'ignore' as const };
-      if (process.platform === 'win32') (opts as any).shell = true;
-      execSync(`${this.binaryPath} --version`, opts);
-    } catch {
-      return { kind: 'not-installed', models: KIMI_FALLBACK_MODELS, version };
+    const resolvedPath = probeBinary(this.binaryPath);
+    if (!resolvedPath) {
+      return { kind: 'not-installed', models: this.getFallbackModels() };
     }
 
-    // Try a quick ACP initialize to check auth status
-    try {
-      const authCheck = await this.quickAcpProbe();
-      if (authCheck?.authRequired) {
-        return {
-          kind: 'not-authenticated',
-          installCmd: 'kimi login',
-          models: authCheck.models ?? KIMI_FALLBACK_MODELS,
-          version,
-        };
-      }
-      return {
-        kind: 'ready',
-        models: authCheck?.models ?? KIMI_FALLBACK_MODELS,
-        version,
-      };
-    } catch {
-      // If ACP probe fails, assume ready (CLI is installed)
-      return { kind: 'ready', models: KIMI_FALLBACK_MODELS, version };
+    const apiKey = this.readApiKey();
+    const config = this.readKimiConfig();
+    const models = config.models.length > 0 ? config.models : this.getFallbackModels();
+
+    if (!apiKey) {
+      return { kind: 'not-authenticated', installCmd: 'kimi login', models };
     }
+    return { kind: 'ready', models };
   }
 
-  /** Quick ACP initialize to detect auth status and available models. */
-  private quickAcpProbe(): Promise<{ authRequired?: boolean; models?: string[] } | null> {
-    return new Promise((resolve, reject) => {
-      const proc = spawn(this.binaryPath, ['acp'], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' },
-      });
-
-      let stdout = '';
-      let stderr = '';
-      let resolved = false;
-      const timer = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          proc.kill();
-          resolve(null);
-        }
-      }, 8_000);
-
-      proc.stdout?.on('data', (d) => {
-        stdout += d.toString();
-        const lines = stdout.split('\n');
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const msg = JSON.parse(line) as JsonRpcResponse;
-            if (msg.id === 1) {
-              clearTimeout(timer);
-              if (!resolved) {
-                resolved = true;
-                proc.kill();
-                if (msg.error) {
-                  if (msg.error.code === -32000) {
-                    resolve({ authRequired: true });
-                  } else {
-                    reject(new Error(msg.error.message));
-                  }
-                } else if (msg.result && typeof msg.result === 'object') {
-                  const result = msg.result as any;
-                  // Extract models from initialize response if available
-                  resolve({ models: KIMI_FALLBACK_MODELS });
-                } else {
-                  resolve({});
-                }
-              }
-            }
-          } catch {
-            // ignore non-JSON lines
-          }
-        }
-      });
-
-      proc.stderr?.on('data', (d) => { stderr += d.toString(); });
-      proc.on('error', (err) => {
-        clearTimeout(timer);
-        if (!resolved) { resolved = true; reject(err); }
-      });
-      proc.on('exit', () => {
-        clearTimeout(timer);
-        if (!resolved) { resolved = true; resolve(null); }
-      });
-
-      const initReq: JsonRpcRequest = {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: 1,
-          clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: true },
-          clientInfo: { name: 'flux-code', version: '0.1.0' },
-        },
-      };
-      proc.stdin!.write(JSON.stringify(initReq) + '\n');
-    });
+  private getFallbackModels(): string[] {
+    return ['kimi-code/kimi-for-coding'];
   }
 
   async startSession(input: ProviderSessionStartInput): Promise<ProviderSession> {
     const now = new Date().toISOString();
 
     // Note: session/connecting and session/ready are emitted by ProviderService
-    // via ProviderSessionDirectory. Adapter should NOT emit them to avoid duplicates.
+    const config = this.readKimiConfig();
+    const model = input.model ?? config.models[0] ?? 'kimi-code/kimi-for-coding';
 
-    const proc = spawn(this.binaryPath, ['acp'], {
-      cwd: input.cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' },
-    });
-
-    const session: KimiSession = {
-      process: proc,
-      sessionId: '',
+    this.sessions.set(input.threadId, {
       turnId: null,
-      abortCtrl: new AbortController(),
-      models: KIMI_FALLBACK_MODELS,
-      pendingReqs: new Map(),
-      reqId: 0,
-    };
-
-    this.sessions.set(input.threadId, session);
-
-    // Start stdout reader
-    const rl = createInterface({ input: proc.stdout! });
-    rl.on('line', (line) => this.handleLine(input.threadId, line));
-
-    proc.stderr?.on('data', (data) => {
-      const text = data.toString();
-      if (text.includes('error') || text.includes('Error')) {
-        this.emit({
-          id: generateEventId(),
-          kind: 'error',
-          provider: 'kimi',
-          threadId: input.threadId,
-          createdAt: new Date().toISOString(),
-          method: 'error/session',
-          message: text.trim(),
-        });
-      }
-    });
-
-    proc.on('error', (err) => {
-      this.emit({
-        id: generateEventId(),
-        kind: 'error',
-        provider: 'kimi',
-        threadId: input.threadId,
-        createdAt: new Date().toISOString(),
-        method: 'error/session',
-        message: err.message,
-      });
-    });
-
-    proc.on('exit', (code) => {
-      if (code !== 0 && code !== null) {
-        this.emit({
-          id: generateEventId(),
-          kind: 'error',
-          provider: 'kimi',
-          threadId: input.threadId,
-          createdAt: new Date().toISOString(),
-          method: 'error/session',
-          message: `Kimi ACP exited with code ${code}`,
-        });
-      }
-      this.sessions.delete(input.threadId);
-    });
-
-    // Handshake: initialize
-    await this.sendRequest(input.threadId, 'initialize', {
-      protocolVersion: 1,
-      clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: true },
-      clientInfo: { name: 'flux-code', version: '0.1.0' },
-    });
-
-    // Create session
-    const sessionRes = (await this.sendRequest(input.threadId, 'session/new', {
+      sessionId: null,
+      model,
       cwd: input.cwd ?? process.cwd(),
-      mcpServers: [],
-    })) as { sessionId: string; models?: { availableModels?: Array<{ modelId: string; name: string }> } };
-
-    session.sessionId = sessionRes.sessionId;
-    if (sessionRes.models?.availableModels) {
-      session.models = sessionRes.models.availableModels.map((m) => m.modelId);
-    }
+      interactionMode: input.interactionMode ?? 'default',
+      toolNames: new Map(),
+    });
 
     return {
       provider: 'kimi',
       status: 'ready',
       runtimeMode: input.runtimeMode,
       threadId: input.threadId,
-      model: input.model ?? session.models[0] ?? KIMI_FALLBACK_MODELS[0],
+      model,
       cwd: input.cwd,
       resumeCursor: input.resumeCursor,
       createdAt: now,
@@ -278,27 +93,10 @@ export class KimiAdapter implements ProviderAdapterShape {
 
   async stopSession(threadId: number): Promise<void> {
     const session = this.sessions.get(threadId);
-    if (!session) return;
-
-    // Close session if supported
-    if (session.sessionId) {
-      try {
-        await this.sendRequest(threadId, 'session/close', { sessionId: session.sessionId });
-      } catch {
-        // ignore
-      }
+    if (session?.process) {
+      session.process.kill('SIGTERM');
     }
-
-    session.process.kill('SIGTERM');
     this.sessions.delete(threadId);
-    this.emit({
-      id: generateEventId(),
-      kind: 'session',
-      provider: 'kimi',
-      threadId,
-      createdAt: new Date().toISOString(),
-      method: 'session/closed',
-    });
   }
 
   async stopAll(): Promise<void> {
@@ -311,7 +109,7 @@ export class KimiAdapter implements ProviderAdapterShape {
     const session = this.sessions.get(input.threadId);
     if (!session) throw new Error(`Session for thread ${input.threadId} not found`);
 
-    const turnId = generateTurnId();
+    const turnId = input.turnId || generateTurnId();
     session.turnId = turnId;
 
     this.emit({
@@ -324,8 +122,151 @@ export class KimiAdapter implements ProviderAdapterShape {
       turnId,
     });
 
-    // Send prompt asynchronously
-    this.runPromptTurn(input.threadId, turnId, input.input ?? '', input.attachments).catch((err) => {
+    const args: string[] = ['--print', '--output-format', 'stream-json', '--yolo'];
+
+    if (session.sessionId) {
+      args.push('-r', session.sessionId);
+    }
+
+    if (session.model) {
+      args.push('--model', session.model);
+    }
+
+    const mode = input.interactionMode ?? session.interactionMode ?? 'default';
+    if (mode === 'plan') {
+      args.push('--plan');
+    }
+
+    const prompt = input.input ?? '';
+    // --prompt must be a single argument — do NOT use shell: true
+    args.push('--prompt', prompt);
+
+    const cwd = session.cwd;
+
+    console.log('[KimiAdapter] Spawning:', this.binaryPath, JSON.stringify(args), 'cwd:', cwd);
+
+    const proc = spawnCli(this.binaryPath, args, {
+      cwd,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',
+        FORCE_COLOR: '0',
+        NO_COLOR: '1',
+      },
+    });
+
+    session.process = proc;
+
+    let stdoutAccum = '';
+    let sessionId: string | null = null;
+    const openToolIds = new Set<string>();
+
+    const rl = createInterface({ input: proc.stdout! });
+    rl.on('line', (rawLine) => {
+      stdoutAccum += rawLine + '\n';
+      if (!rawLine.trim()) return;
+
+      // Parse "To resume this session: kimi -r <id>"
+      const resumeMatch = rawLine.match(/To resume this session: kimi -r ([a-f0-9-]+)/);
+      if (resumeMatch) {
+        sessionId = resumeMatch[1];
+        return;
+      }
+
+      // Parse JSON lines
+      let msg: any;
+      try {
+        msg = JSON.parse(rawLine);
+      } catch {
+        return;
+      }
+
+      if (msg.role === 'assistant') {
+        if (Array.isArray(msg.content)) {
+          for (const part of msg.content) {
+            if (part.type === 'think' && part.think) {
+              this.emit({
+                id: generateEventId(),
+                kind: 'notification',
+                provider: 'kimi',
+                threadId: input.threadId,
+                createdAt: new Date().toISOString(),
+                method: 'item/thinking/delta',
+                turnId,
+                textDelta: part.think,
+              });
+            }
+            if (part.type === 'text' && part.text) {
+              this.emit({
+                id: generateEventId(),
+                kind: 'notification',
+                provider: 'kimi',
+                threadId: input.threadId,
+                createdAt: new Date().toISOString(),
+                method: 'item/agentMessage/delta',
+                turnId,
+                textDelta: part.text,
+              });
+            }
+          }
+        }
+
+        if (Array.isArray(msg.tool_calls)) {
+          for (const tc of msg.tool_calls) {
+            const toolId = tc.id || `tool-${Date.now()}`;
+            const toolName = tc.function?.name || 'tool';
+            const toolArgs = tc.function?.arguments || '{}';
+            openToolIds.add(toolId);
+            session.toolNames.set(toolId, toolName.toLowerCase().replace(/_/g, '-'));
+            this.emit({
+              id: generateEventId(),
+              kind: 'notification',
+              provider: 'kimi',
+              threadId: input.threadId,
+              createdAt: new Date().toISOString(),
+              method: 'item/tool/started',
+              turnId,
+              itemId: toolId,
+              toolName: toolName.toLowerCase().replace(/_/g, '-'),
+              payload: { arguments: toolArgs, name: toolName },
+            });
+          }
+        }
+      }
+
+      if (msg.role === 'tool') {
+        const toolCallId = msg.tool_call_id || '';
+        const result = Array.isArray(msg.content)
+          ? msg.content.map((c: any) => c.text || '').join('')
+          : String(msg.content || '');
+        if (toolCallId) {
+          const toolName = session.toolNames.get(toolCallId);
+          this.emit({
+            id: generateEventId(),
+            kind: 'notification',
+            provider: 'kimi',
+            threadId: input.threadId,
+            createdAt: new Date().toISOString(),
+            method: 'item/tool/completed',
+            turnId,
+            itemId: toolCallId,
+            toolName,
+            payload: { result },
+          });
+          openToolIds.delete(toolCallId);
+          session.toolNames.delete(toolCallId);
+        }
+      }
+    });
+
+    proc.stderr?.on('data', (data) => {
+      const text = data.toString();
+      console.log('[KimiAdapter] stderr:', text.trim());
+    });
+
+    proc.on('error', (err) => {
+      console.error('[KimiAdapter] proc error:', err.message);
       this.emit({
         id: generateEventId(),
         kind: 'error',
@@ -334,86 +275,81 @@ export class KimiAdapter implements ProviderAdapterShape {
         createdAt: new Date().toISOString(),
         method: 'error/turn',
         turnId,
-        message: err.message || 'Kimi prompt failed',
+        message: err.message,
       });
+    });
+
+    proc.on('exit', (code, signal) => {
+      console.log('[KimiAdapter] proc exit code:', code, 'signal:', signal, 'sessionId:', sessionId);
+      if (sessionId) {
+        session.sessionId = sessionId;
+      }
+
+      // Close any remaining open tool events
+      for (const itemId of openToolIds) {
+        this.emit({
+          id: generateEventId(),
+          kind: 'notification',
+          provider: 'kimi',
+          threadId: input.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'item/tool/completed',
+          turnId,
+          itemId,
+        });
+      }
+      openToolIds.clear();
+
+      if (code !== 0 && code !== null) {
+        const stderr = proc.stderr ? '[stderr available]' : '[no stderr]';
+        this.emit({
+          id: generateEventId(),
+          kind: 'error',
+          provider: 'kimi',
+          threadId: input.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'error/turn',
+          turnId,
+          message: `Kimi exited with code ${code}. ${stderr}`,
+        });
+      }
+
+      this.emit({
+        id: generateEventId(),
+        kind: 'notification',
+        provider: 'kimi',
+        threadId: input.threadId,
+        createdAt: new Date().toISOString(),
+        method: 'turn/completed',
+        turnId,
+      });
+      session.turnId = null;
+      session.process = undefined;
     });
 
     return { turnId };
   }
 
-  private async runPromptTurn(
-    threadId: number,
-    turnId: string,
-    text: string,
-    attachments?: Array<{ path: string; mimeType?: string }>,
-  ): Promise<void> {
-    const session = this.sessions.get(threadId);
-    if (!session) return;
-
-    const promptBlocks: Array<{ type: string; text?: string; resource?: unknown }> = [];
-
-    // Read attached files
-    if (attachments?.length) {
-      const fs = await import('fs/promises');
-      const path = await import('path');
-      for (const att of attachments) {
-        try {
-          const content = await fs.readFile(path.resolve(att.path), 'utf8');
-          promptBlocks.push({
-            type: 'resource',
-            resource: {
-              uri: `file://${att.path}`,
-              mimeType: att.mimeType ?? 'text/plain',
-              text: content,
-            },
-          });
-        } catch {
-          // skip unreadable attachments
-        }
-      }
-    }
-
-    promptBlocks.push({ type: 'text', text });
-
-    const res = (await this.sendRequest(threadId, 'session/prompt', {
-      sessionId: session.sessionId,
-      prompt: promptBlocks,
-    })) as { stopReason?: string };
-
-    session.turnId = null;
-
-    this.emit({
-      id: generateEventId(),
-      kind: 'notification',
-      provider: 'kimi',
-      threadId,
-      createdAt: new Date().toISOString(),
-      method: 'turn/completed',
-      turnId,
-    });
-  }
-
   async interruptTurn(threadId: number, _turnId?: string): Promise<void> {
     const session = this.sessions.get(threadId);
-    if (!session || !session.sessionId) return;
-    this.sendNotification(threadId, 'session/cancel', { sessionId: session.sessionId });
+    if (session?.process) {
+      session.process.kill('SIGTERM');
+    }
   }
 
   async respondToRequest(_threadId: number, _requestId: string, _decision: ProviderApprovalDecision): Promise<void> {
-    // Permissions are auto-allowed for now; handled inline in handleLine.
+    // Print mode auto-approves all actions
   }
 
   async respondToUserInput(_threadId: number, _requestId: string, _answers: ProviderUserInputAnswers): Promise<void> {
-    // Not used by Kimi ACP in YOLO mode.
+    // Not supported in print mode
   }
 
-  async readThread(threadId: number): Promise<ProviderThreadSnapshot> {
-    // ACP doesn't expose conversation history directly.
+  async readThread(_threadId: number): Promise<ProviderThreadSnapshot> {
     return { turns: [] };
   }
 
   async rollbackThread(_threadId: number, _numTurns: number): Promise<ProviderThreadSnapshot> {
-    // Not supported by ACP directly.
     return { turns: [] };
   }
 
@@ -424,7 +360,7 @@ export class KimiAdapter implements ProviderAdapterShape {
       status: 'ready' as const,
       runtimeMode: 'full-access' as const,
       threadId,
-      model: s.models[0] ?? KIMI_FALLBACK_MODELS[0],
+      model: s.model,
       activeTurnId: s.turnId ?? undefined,
       createdAt: now,
       updatedAt: now,
@@ -442,226 +378,114 @@ export class KimiAdapter implements ProviderAdapterShape {
 
   private emit(event: ProviderRuntimeEvent) {
     for (const h of this.eventHandlers) {
-      try { h(event); } catch { /* ignore */ }
+      try {
+        h(event);
+      } catch {
+        // ignore
+      }
     }
   }
 
-  // ─── JSON-RPC helpers ───────────────────────────────────────────────────────
-
-  private sendRequest(threadId: number, method: string, params: unknown): Promise<unknown> {
-    const session = this.sessions.get(threadId);
-    if (!session) return Promise.reject(new Error('Session not found'));
-
-    const id = ++session.reqId;
-    const req: JsonRpcRequest = { jsonrpc: '2.0', id, method, params };
-
-    return new Promise((resolve, reject) => {
-      session.pendingReqs.set(id, { resolve, reject });
-      session.process.stdin!.write(JSON.stringify(req) + '\n', (err) => {
-        if (err) {
-          session.pendingReqs.delete(id);
-          reject(err);
-        }
-      });
-    });
+  /** Return cached model metadata including variants from config.toml. */
+  getCachedModels(): Array<{ id: string; name: string; providerID: string; variants?: Record<string, Record<string, unknown>> }> {
+    const config = this.readKimiConfig();
+    return config.models.map((id) => ({
+      id,
+      name: config.displayNames[id] || id,
+      providerID: 'kimi',
+      variants: config.variants[id]?.length
+        ? Object.fromEntries(config.variants[id].map((v) => [v, {}]))
+        : undefined,
+    }));
   }
 
-  private sendNotification(threadId: number, method: string, params: unknown): void {
-    const session = this.sessions.get(threadId);
-    if (!session) return;
-    const notif: JsonRpcNotification = { jsonrpc: '2.0', method, params };
-    session.process.stdin!.write(JSON.stringify(notif) + '\n');
-  }
+  private readApiKey(): string | null {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
 
-  private handleLine(threadId: number, line: string) {
-    if (!line.trim()) return;
-    let msg: JsonRpcResponse | JsonRpcNotification | JsonRpcRequest;
+    // New kimi CLI uses OAuth tokens in ~/.kimi/credentials/kimi-code.json
+    const oauthFile = path.join(os.homedir(), '.kimi', 'credentials', 'kimi-code.json');
     try {
-      msg = JSON.parse(line);
-    } catch {
-      return;
-    }
+      if (fs.existsSync(oauthFile)) {
+        const data = JSON.parse(fs.readFileSync(oauthFile, 'utf8'));
+        if (data.access_token) return data.access_token;
+      }
+    } catch { /* ignore */ }
 
-    const session = this.sessions.get(threadId);
-    if (!session) return;
+    // Fallback: old auth.json locations
+    const candidates = [
+      path.join(os.homedir(), '.config', 'kimi', 'auth.json'),
+      path.join(os.homedir(), '.kimi', 'auth.json'),
+      process.env.APPDATA ? path.join(process.env.APPDATA, 'kimi', 'auth.json') : '',
+      process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'kimi', 'auth.json') : '',
+    ];
 
-    // Messages with id: either response to our request OR incoming request from agent
-    if ('id' in msg && typeof msg.id === 'number') {
-      const pending = session.pendingReqs.get(msg.id);
-      if (pending) {
-        // It's a response to our pending request (has id, no method)
-        session.pendingReqs.delete(msg.id);
-        if ('error' in msg && (msg as JsonRpcResponse).error) {
-          pending.reject(new Error((msg as JsonRpcResponse).error!.message));
-        } else {
-          pending.resolve((msg as JsonRpcResponse).result);
+    for (const authFile of candidates) {
+      if (!authFile) continue;
+      try {
+        if (fs.existsSync(authFile)) {
+          const data = JSON.parse(fs.readFileSync(authFile, 'utf8'));
+          if (data.apiKey) return data.apiKey;
         }
-        return;
-      }
-      if ('method' in msg) {
-        // It's an incoming request FROM the agent (has id + method)
-        this.handleAgentRequest(threadId, msg as JsonRpcRequest);
-        return;
-      }
+      } catch { /* ignore */ }
     }
 
-    // Handle notifications (has method, no id)
-    if ('method' in msg && !('id' in msg)) {
-      this.handleNotification(threadId, msg as JsonRpcNotification);
-    }
+    return process.env.MOONSHOT_API_KEY ?? null;
   }
 
-  private handleAgentRequest(threadId: number, req: JsonRpcRequest) {
-    const session = this.sessions.get(threadId);
-    if (!session) return;
+  /** Read kimi CLI config.toml to extract models and variants. */
+  private readKimiConfig(): { models: string[]; variants: Record<string, string[]>; displayNames: Record<string, string> } {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const configPath = path.join(os.homedir(), '.kimi', 'config.toml');
 
-    if (req.method === 'session/request_permission') {
-      const resp = {
-        jsonrpc: '2.0',
-        id: req.id,
-        result: {
-          outcome: { outcome: 'selected', optionId: 'allow-once' },
-        },
-      };
-      session.process.stdin!.write(JSON.stringify(resp) + '\n');
-      return;
-    }
+    const models: string[] = [];
+    const variants: Record<string, string[]> = {};
+    const displayNames: Record<string, string> = {};
 
-    // Unknown request — respond with method not found
-    const resp = {
-      jsonrpc: '2.0',
-      id: req.id,
-      error: { code: -32601, message: `Method not found: ${req.method}` },
-    };
-    session.process.stdin!.write(JSON.stringify(resp) + '\n');
-  }
+    try {
+      if (!fs.existsSync(configPath)) return { models, variants, displayNames };
+      const content = fs.readFileSync(configPath, 'utf8');
 
-  private handleNotification(threadId: number, notif: JsonRpcNotification) {
-    const session = this.sessions.get(threadId);
-    if (!session) return;
-
-    if (notif.method === 'session/update') {
-      const params = (notif.params ?? {}) as any;
-      const update = params.update ?? {};
-      const sessionId = params.sessionId;
-      if (sessionId !== session.sessionId) return;
-
-      const turnId = session.turnId;
-      if (!turnId) return;
-
-      switch (update.sessionUpdate) {
-        case 'agent_message_chunk': {
-          const text = update.content?.text ?? '';
-          if (text) {
-            this.emit({
-              id: generateEventId(),
-              kind: 'notification',
-              provider: 'kimi',
-              threadId,
-              createdAt: new Date().toISOString(),
-              method: 'item/agentMessage/delta',
-              turnId,
-              textDelta: text,
-            });
-          }
-          break;
-        }
-        case 'agent_thought_chunk': {
-          const text = update.content?.text ?? '';
-          if (text) {
-            this.emit({
-              id: generateEventId(),
-              kind: 'notification',
-              provider: 'kimi',
-              threadId,
-              createdAt: new Date().toISOString(),
-              method: 'item/thinking/delta',
-              turnId,
-              textDelta: text,
-            });
-          }
-          break;
-        }
-        case 'tool_call': {
-          this.emit({
-            id: generateEventId(),
-            kind: 'notification',
-            provider: 'kimi',
-            threadId,
-            createdAt: new Date().toISOString(),
-            method: 'item/tool/started',
-            turnId,
-            itemId: update.toolCallId,
-            toolName: mapToolKind(update.kind),
-            payload: {
-              title: update.title,
-              kind: update.kind,
-              status: update.status,
-              rawInput: update.rawInput,
-            },
-          });
-          break;
-        }
-        case 'tool_call_update': {
-          const isDone = update.status === 'completed' || update.status === 'failed';
-          if (isDone) {
-            this.emit({
-              id: generateEventId(),
-              kind: 'notification',
-              provider: 'kimi',
-              threadId,
-              createdAt: new Date().toISOString(),
-              method: 'item/tool/completed',
-              turnId,
-              itemId: update.toolCallId,
-              payload: {
-                status: update.status,
-                content: update.content,
-                rawOutput: update.rawOutput,
-              },
-            });
-          }
-          break;
-        }
-        case 'plan': {
-          // Could emit as thinking or ignore
-          break;
-        }
-        default:
-          break;
+      // Extract default_model
+      const defaultMatch = content.match(/^default_model\s*=\s*"([^"]+)"/m);
+      if (defaultMatch && !models.includes(defaultMatch[1])) {
+        models.push(defaultMatch[1]);
       }
-      return;
-    }
 
-    if (notif.method === 'session/request_permission') {
-      const params = (notif.params ?? {}) as any;
-      const reqId = (notif as any).id;
-      if (reqId !== undefined) {
-        // Auto-allow for now
-        const resp = {
-          jsonrpc: '2.0',
-          id: reqId,
-          result: {
-            outcome: { outcome: 'selected', optionId: 'allow-once' },
-          },
-        };
-        session.process.stdin!.write(JSON.stringify(resp) + '\n');
+      // Extract [models."..."] sections
+      const modelSectionRegex = /\[models\."([^"]+)"\]/g;
+      let match;
+      while ((match = modelSectionRegex.exec(content)) !== null) {
+        const modelId = match[1];
+        if (!models.includes(modelId)) {
+          models.push(modelId);
+        }
+
+        // Extract capabilities as variants
+        const sectionStart = match.index;
+        const nextSection = content.indexOf('[', sectionStart + 1);
+        const sectionEnd = nextSection === -1 ? content.length : nextSection;
+        const section = content.slice(sectionStart, sectionEnd);
+
+        const capsMatch = section.match(/capabilities\s*=\s*\[([^\]]+)\]/);
+        if (capsMatch) {
+          const caps = capsMatch[1]
+            .split(',')
+            .map((s: string) => s.trim().replace(/^"/, '').replace(/"$/, ''))
+            .filter((s: string) => s);
+          variants[modelId] = caps;
+        }
+
+        const nameMatch = section.match(/display_name\s*=\s*"([^"]+)"/);
+        if (nameMatch) {
+          displayNames[modelId] = nameMatch[1];
+        }
       }
-      return;
-    }
-  }
-}
+    } catch { /* ignore */ }
 
-function mapToolKind(kind: string): string {
-  switch (kind) {
-    case 'read': return 'read_file';
-    case 'edit': return 'str_replace_editor';
-    case 'delete': return 'bash';
-    case 'move': return 'bash';
-    case 'search': return 'bash';
-    case 'execute': return 'bash';
-    case 'think': return 'thinking';
-    case 'fetch': return 'bash';
-    default: return 'tool';
+    return { models, variants, displayNames };
   }
 }

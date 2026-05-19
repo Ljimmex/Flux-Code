@@ -3,6 +3,7 @@ import * as path from 'path';
 import { DatabaseManager } from './db';
 import { initChat, cleanupChat } from './chat';
 import { initProviders, cleanupProviders } from './provider';
+import { initDiffIPC } from './diff';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -119,6 +120,7 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
   initChat(dbManager);
+  initDiffIPC();
   if (mainWindow) {
     initProviders(mainWindow, dbManager);
   }

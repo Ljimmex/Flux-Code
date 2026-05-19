@@ -53,6 +53,7 @@ export interface ElectronAPI {
     checkUpdates: () => Promise<Record<string, { current?: string; latest?: string; hasUpdate: boolean }>>;
     updateCli: (kind: string) => Promise<{ success: boolean; error?: string }>;
     getOpenCodeModels: () => Promise<{ id: string; name: string; providerID: string; variants?: Record<string, Record<string, unknown>> }[]>;
+    getKimiModels: () => Promise<{ id: string; name: string; providerID: string; variants?: Record<string, Record<string, unknown>> }[]>;
   };
   onChatToken: (callback: (data: { threadId: number; token: string }) => void) => () => void;
   onChatDone: (callback: (data: { threadId: number }) => void) => () => void;
@@ -62,6 +63,11 @@ export interface ElectronAPI {
   onProviderModels: (callback: (data: { kind: string; models: string[] }) => void) => () => void;
   onProviderUpdates: (callback: (updates: Record<string, { current?: string; latest?: string; hasUpdate: boolean }>) => void) => () => void;
   onNavigate: (callback: (path: string) => void) => () => void;
+  diff: {
+    readFile: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+    gitDiff: (projectPath: string, filePath?: string) => Promise<{ success: boolean; patch?: string; error?: string }>;
+    gitShow: (projectPath: string, filePath: string, ref?: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+  };
 }
 
 const api: ElectronAPI = {
@@ -117,6 +123,7 @@ const api: ElectronAPI = {
     checkUpdates: () => ipcRenderer.invoke('provider:checkUpdates'),
     updateCli: (kind) => ipcRenderer.invoke('provider:updateCli', kind),
     getOpenCodeModels: () => ipcRenderer.invoke('provider:getOpenCodeModels'),
+    getKimiModels: () => ipcRenderer.invoke('provider:getKimiModels'),
   },
   onChatToken: (callback) => {
     const handler = (_: any, data: any) => callback(data);
@@ -159,6 +166,11 @@ const api: ElectronAPI = {
     return () => {
       ipcRenderer.removeListener('navigate-to', handler);
     };
+  },
+  diff: {
+    readFile: (filePath) => ipcRenderer.invoke('diff:readFile', filePath),
+    gitDiff: (projectPath, filePath) => ipcRenderer.invoke('diff:gitDiff', projectPath, filePath),
+    gitShow: (projectPath, filePath, ref) => ipcRenderer.invoke('diff:gitShow', projectPath, filePath, ref),
   },
 };
 

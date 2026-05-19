@@ -261,6 +261,7 @@ textarea {
 }
 
 .window-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -285,6 +286,42 @@ textarea {
 .window-btn.maximize:hover {
   background: var(--border-color);
   color: var(--text-primary);
+}
+
+/* Custom tooltip for window controls */
+.window-btn-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  background: #1f1f1f;
+  color: #cccccc;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  border: 1px solid #3c3c3c;
+  opacity: 0;
+  animation: tooltip-in 0.15s ease forwards;
+}
+
+@keyframes tooltip-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-2px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.window-btn-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-bottom-color: #3c3c3c;
 }
 
 .topbar-logo {
@@ -420,7 +457,7 @@ textarea {
 .sidebar-brand-name {
   font-weight: 600;
   font-size: 14px;
-  color: var(--accent);
+  color: var(--text-primary);
 }
 
 
@@ -1145,6 +1182,12 @@ textarea {
 .message-content-meta.assistant-meta {
   align-self: flex-start;
   margin-top: 4px;
+}
+
+.empty-response {
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 0;
 }
 
 .message-time {

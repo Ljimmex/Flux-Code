@@ -124,6 +124,7 @@ export interface ProviderSessionStartInput {
 
 export interface ProviderSendTurnInput {
   threadId: number;
+  turnId?: string;
   input?: string;
   attachments?: ChatAttachment[];
   model?: string;

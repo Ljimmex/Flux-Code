@@ -8,8 +8,10 @@ import type { Thread, Project } from '../App';
 import { useProviderStore, type ProviderDraft } from '../stores/providerStore';
 import { DEFAULT_MODEL, type ProviderKind } from '../types/provider';
 import type { ActivityItem } from '../types/activity';
-import MarkdownRenderer from './MarkdownRenderer';
+import ChatMarkdown from './ChatMarkdown';
 import { WorkLog } from './WorkLog';
+import { ChangedFilesBadge } from './ChangedFilesBadge';
+import { DiffPanel } from './DiffPanel';
 
 interface Props {
   activeThread: Thread | null;
@@ -273,6 +275,8 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [diffPanelOpen, setDiffPanelOpen] = useState(false);
+  const [diffPanelFiles, setDiffPanelFiles] = useState<string[]>([]);
   const [errorToast, setErrorToast] = useState<string | null>(null);
   const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState('');
@@ -290,11 +294,15 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     envVars, serverUrls, serverPasswords,
     statuses,
     setActiveProvider, setActiveModel, setModelMeta, setModelOptions,
-    streamingContent: storeStreamingContent,
-    isStreaming: storeIsStreaming,
+    streamingByThread,
     error: storeError,
     endStreaming, setError,
   } = useProviderStore();
+
+  // Per-thread streaming state
+  const threadStreaming = activeThread ? streamingByThread[activeThread.id] : undefined;
+  const storeStreamingContent = threadStreaming?.content ?? '';
+  const storeIsStreaming = !!threadStreaming;
 
   // Helper to get current model options for active provider
   const activeDraft = providerDrafts[activeProvider] ?? {};
@@ -418,14 +426,37 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     return () => window.removeEventListener('keydown', handler);
   }, [openDropdown, dropdownProvider, enabledProvidersList, currentModels, highlightedIndex, setActiveProvider, setActiveModel]);
 
-  // Sync store streaming to local state
+  // Sync store streaming to local state (per-thread aware)
   useEffect(() => {
     if (storeIsStreaming) {
       setStreamingContent(storeStreamingContent);
       setIsGenerating(true);
       generatingRef.current = true;
+    } else {
+      // Streaming ended for this thread
+      if (generatingRef.current) {
+        // Only clear if we were generating — a thread switch will reset via the thread change effect
+      }
+      setStreamingContent('');
     }
   }, [storeStreamingContent, storeIsStreaming]);
+
+  // When thread changes, sync generation state from per-thread store
+  useEffect(() => {
+    if (activeThread) {
+      const streaming = streamingByThread[activeThread.id];
+      if (streaming) {
+        setStreamingContent(streaming.content);
+        setIsGenerating(true);
+        generatingRef.current = true;
+      } else {
+        setStreamingContent('');
+        setIsGenerating(false);
+        generatingRef.current = false;
+        setGenerationStartTime(null);
+      }
+    }
+  }, [activeThread?.id]);
 
   // Timer for generation duration
   useEffect(() => {
@@ -449,7 +480,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
       generatingRef.current = false;
       setStreamingContent('');
       setGenerationStartTime(null);
-      endStreaming();
+      if (activeThread) endStreaming(activeThread.id);
       setTimeout(() => { setErrorToast(null); setError(null); }, 5000);
     }
   }, [storeError]);
@@ -465,14 +496,20 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     window.electronAPI.db.getActivitiesForThread(activeThread.id).then(setActivities);
   }, [activeThread?.id]);
 
-  // Listen for live activity events from provider
+  // Listen for live activity events from provider (filtered by active thread)
   useEffect(() => {
     const unsub = window.electronAPI.onProviderEvent((event: any) => {
+      // Only process events for the currently active thread
       if (
         activeThread &&
+        event.threadId === activeThread.id &&
         (event.method === 'item/tool/started' || event.method === 'item/tool/completed')
       ) {
-        window.electronAPI.db.getActivitiesForThread(activeThread.id).then(setActivities);
+        console.log('[ChatPanel] provider:event', event.method, 'thread:', event.threadId, 'turn:', event.turnId);
+        window.electronAPI.db.getActivitiesForThread(activeThread.id).then((acts) => {
+          console.log('[ChatPanel] Activities refreshed:', acts.length, 'for thread', activeThread.id);
+          setActivities(acts);
+        });
       }
     });
     return unsub;
@@ -546,8 +583,10 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     setStreamingContent('');
     setGenerationStartTime(Date.now());
 
-    // Optimistically add user message to UI
-    setMessages(prev => [...prev, { role: 'user', content: text }]);
+    const turnId = `turn_${Date.now()}`;
+
+    // Optimistically add user message to UI (with turn_id so timeline can group activities)
+    setMessages(prev => [...prev, { role: 'user', content: text, turn_id: turnId }]);
 
     console.log('[ChatPanel] Sending via provider:', activeProvider, 'model:', activeModel, 'thread:', activeThread.id);
     try {
@@ -565,7 +604,6 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
         env: envVars[activeProvider] || undefined,
       });
 
-      const turnId = `turn_${Date.now()}`;
       await window.electronAPI.provider.sendTurn(activeThread.id, turnId, text);
     } catch (err: any) {
       console.error('[ChatPanel] Failed to send message:', err);
@@ -583,7 +621,7 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
     generatingRef.current = false;
     setStreamingContent('');
     setGenerationStartTime(null);
-    endStreaming();
+    endStreaming(activeThread.id);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -606,6 +644,8 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
       message?: any;
       activities?: ActivityItem[];
       turnId?: string;
+      isEmptyResponse?: boolean;
+      fileWriteActivities?: ActivityItem[];
     }
 
     const result: TimelineItem[] = [];
@@ -615,6 +655,8 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
       list.push(act);
       activitiesByTurn.set(act.turn_id, list);
     }
+
+    console.log('[ChatPanel] buildTimeline — messages:', messages.length, 'activities:', activities.length, 'turns with acts:', Array.from(activitiesByTurn.keys()));
 
     // Group messages by turn_id
     const messagesByTurn = new Map<string, any[]>();
@@ -646,7 +688,9 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
           result.push({ type: 'worklog', activities: turnActivities, turnId: msg.turn_id });
         }
         if (assistantMsg) {
-          result.push({ type: 'assistant', message: assistantMsg, turnId: msg.turn_id });
+          const isEmpty = !assistantMsg.content?.trim() && turnActivities.length > 0;
+          const fileWriteActivities = turnActivities.filter((a) => a.kind === 'fileWrite');
+          result.push({ type: 'assistant', message: assistantMsg, turnId: msg.turn_id, isEmptyResponse: isEmpty, fileWriteActivities });
         }
       }
     }
@@ -712,7 +756,11 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
             return (
               <div key={`msg-${msg.id ?? i}`} className={`message message-${msg.role}`}>
                 <div className="message-content">
-                  <MarkdownRenderer content={msg.content || ''} />
+                  {item.isEmptyResponse ? (
+                    <p className="empty-response">Agent completed tasks without a text response.</p>
+                  ) : (
+                    <ChatMarkdown content={msg.content || ''} />
+                  )}
                   {msg.role === 'user' && (
                     <div className="message-content-meta">
                       <button
@@ -724,6 +772,19 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
                       </button>
                       <span className="message-time">{time}</span>
                     </div>
+                  )}
+                  {item.fileWriteActivities && item.fileWriteActivities.length > 0 && (
+                    <ChangedFilesBadge
+                      fileWriteActivities={item.fileWriteActivities}
+                      onClick={() => {
+                        const files = item.fileWriteActivities!.map((a) => {
+                          const match = a.label.match(/Edit\s+(.+)$/);
+                          return match ? match[1] : a.label;
+                        }).filter((v, i, a) => a.indexOf(v) === i);
+                        setDiffPanelFiles(files);
+                        setDiffPanelOpen(true);
+                      }}
+                    />
                   )}
                   {msg.role === 'assistant' && msg.metadata && (
                     <AgentMessageMeta
@@ -761,11 +822,19 @@ export default function ChatPanel({ activeThread, activeProject, onAddThread }: 
         {isGenerating && streamingContent && (
           <div className="message message-assistant">
             <div className="message-content">
-              <MarkdownRenderer content={streamingContent} />
+              <ChatMarkdown content={streamingContent} />
             </div>
           </div>
         )}
       </div>
+
+      {diffPanelOpen && activeProject && (
+        <DiffPanel
+          projectPath={activeProject.path}
+          files={diffPanelFiles}
+          onClose={() => setDiffPanelOpen(false)}
+        />
+      )}
 
       <div className="chat-input-area">
         <div className="chat-input-wrapper">

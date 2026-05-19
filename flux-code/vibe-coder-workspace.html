@@ -1,0 +1,440 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vibe Coder // Workspace</title>
+    <style>
+        :root {
+            /* Luxury Refined Dark Palette */
+            --bg:      oklch(15% 0.01 250);
+            --surface: oklch(20% 0.01 250);
+            --surface-bright: oklch(25% 0.01 250);
+            --fg:      oklch(90% 0.01 250);
+            --muted:    oklch(60% 0.01 250);
+            --border:   oklch(30% 0.01 250);
+            --accent:   oklch(75% 0.12 200);
+            --accent-muted: oklch(75% 0.12 200 / 20%);
+
+            --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 20px;
+            --shadow-xl: 0 20px 50px rgba(0,0,0,0.5);
+            --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * { box-sizing: border-box; }
+        body, html { 
+            margin: 0; 
+            padding: 0; 
+            height: 100%; 
+            background: var(--bg); 
+            color: var(--fg); 
+            font-family: var(--font-body); 
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Layout Shell */
+        .app-container {
+            display: grid;
+            grid-template-columns: 260px 1fr 300px;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: var(--bg);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 32px;
+        }
+
+        .logo {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 18px;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-icon {
+            width: 24px;
+            height: 24px;
+            background: var(--accent);
+            border-radius: 6px;
+            box-shadow: 0 0 15px var(--accent-muted);
+        }
+
+        .nav-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .nav-item {
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 14px;
+            transition: var(--transition);
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+
+        .nav-item:hover {
+            color: var(--fg);
+            background: var(--surface);
+        }
+
+        .nav-item.active {
+            color: var(--fg);
+            background: var(--surface);
+            border-color: var(--border);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* Main Workspace */
+        .workspace {
+            display: flex;
+            flex-direction: column;
+            background: var(--bg);
+            position: relative;
+        }
+
+        .editor-header {
+            height: 60px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            background: var(--bg);
+        }
+
+        .breadcrumb {
+            font-size: 13px;
+            color: var(--muted);
+            font-family: var(--font-mono);
+        }
+
+        .editor-content {
+            flex: 1;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 32px;
+            overflow-y: auto;
+        }
+
+        /* Refined Prompt Area (The Vibe Core) */
+        .vibe-prompt-container {
+            width: 100%;
+            max-width: 800px;
+            position: relative;
+            margin-top: 40px;
+        }
+
+        .vibe-prompt {
+            width: 100%;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            font-size: 16px;
+            color: var(--fg);
+            font-family: var(--font-body);
+            outline: none;
+            transition: var(--transition);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            resize: none;
+            min-height: 100px;
+        }
+
+        .vibe-prompt:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px var(--accent-muted), 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .prompt-actions {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            border: 1px solid var(--border);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+        }
+
+        .btn-primary:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--surface-bright);
+            color: var(--fg);
+        }
+
+        /* Inspector Panel */
+        .inspector {
+            background: var(--surface);
+            border-left: 1px solid var(--border);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .panel-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted);
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .stat-card {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stat-label { font-size: 13px; color: var(--muted); }
+        .stat-value { font-family: var(--font-mono); font-size: 13px; }
+
+        /* REFINED MODAL SYSTEM */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: var(--transition);
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--surface);
+            width: 500px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-xl);
+            transform: scale(0.95);
+            transition: var(--transition);
+            overflow: hidden;
+        }
+
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-body {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            background: var(--bg);
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        /* UX Helpers */
+        .vibe-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--accent);
+            background: var(--accent-muted);
+            padding: 4px 10px;
+            border-radius: 100px;
+            font-weight: 500;
+        }
+
+        .dot {
+            width: 6px;
+            height: 6px;
+            background: var(--accent);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--accent);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon"></div>
+                VibeCoder
+            </div>
+            
+            <nav class="nav-group">
+                <div class="panel-title">Workspace</div>
+                <a class="nav-item active">⌘ Editor</a>
+                <a class="nav-item">⌥ Assets</a>
+                <a class="nav-item">⎋ History</a>
+            </nav>
+
+            <nav class="nav-group">
+                <div class="panel-title">AI Models</div>
+                <a class="nav-item">Claude 3.5 Sonnet</a>
+                <a class="nav-item">GPT-4o</a>
+                <a class="nav-item">O1-Preview</a>
+            </nav>
+
+            <div style="margin-top: auto;">
+                <div class="nav-item" onclick="toggleModal()">⚙️ Settings</div>
+            </div>
+        </aside>
+
+        <!-- Workspace -->
+        <main class="workspace">
+            <header class="editor-header">
+                <div class="breadcrumb">project / src / app.tsx</div>
+                <div class="vibe-indicator">
+                    <div class="dot"></div>
+                    Vibe: Synchronized
+                </div>
+            </header>
+
+            <div class="editor-content">
+                <h1 style="font-family: var(--font-display); font-weight: 300; font-size: 32px; text-align: center; color: var(--fg);">
+                    What are we building today?
+                </h1>
+                
+                <div class="vibe-prompt-container">
+                    <textarea class="vibe-prompt" placeholder="Describe the vibe, the logic, or the change..."></textarea>
+                    <div class="prompt-actions">
+                        <button class="btn btn-secondary">⌘ K</button>
+                        <button class="btn btn-primary" onclick="toggleModal()">Generate</button>
+                    </div>
+                </div>
+
+                <div style="width: 100%; max-width: 800px; margin-top: 40px; height: 300px; border: 1px dashed var(--border); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; color: var(--muted); font-family: var(--font-mono); font-size: 13px;">
+                    [ Code Preview will appear here ]
+                </div>
+            </div>
+        </main>
+
+        <!-- Inspector -->
+        <aside class="inspector">
+            <div class="panel-title">Analysis</div>
+            
+            <div class="stat-card">
+                <span class="stat-label">Complexity</span>
+                <span class="stat-value">Low</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Vibe Match</span>
+                <span class="stat-value">98%</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Tokens</span>
+                <span class="stat-value">1.2k</span>
+            </div>
+
+            <div class="panel-title" style="margin-top: 20px;">Quick Tweaks</div>
+            <div class="nav-group">
+                <div class="nav-item">Refine Typography</div>
+                <div class="nav-item">Adjust Spacing</div>
+                <div class="nav-item">Switch Palette</div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- REFINED MODAL -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <span style="font-weight: 600; font-size: 16px;">AI Generation Settings</span>
+                <button onclick="toggleModal()" style="background: none; border: none; color: var(--muted); cursor: pointer; font-size: 20px;">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-size: 12px; color: var(--muted);">Temperature</label>
+                    <input type="range" style="width: 100%; accent-color: var(--accent);">
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-size: 12px; color: var(--muted);">Creativity Level</label>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary" style="flex: 1; border-color: var(--accent);">Precise</button>
+                        <button class="btn btn-secondary" style="flex: 1;">Balanced</button>
+                        <button class="btn btn-secondary" style="flex: 1;">Wild</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="toggleModal()">Cancel</button>
+                <button class="btn btn-primary">Run Vibe Check</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleModal() {
+            const overlay = document.getElementById('modalOverlay');
+            overlay.classList.toggle('active');
+        }
+    </script>
+</body>
+</html>

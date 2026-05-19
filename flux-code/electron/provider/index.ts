@@ -75,19 +75,23 @@ function mapToolToActivity(toolName: string, payload: any): { label: string; kin
   switch (toolName) {
     case 'bash':
     case 'shell':
-    case 'computer': {
+    case 'computer':
+    case 'shell-command': {
       const cmd = payload?.command ?? payload?.action ?? '';
       return { label: generateShellSummary(cmd), kind: 'shell' };
     }
     case 'read_file':
     case 'view':
-    case 'cat': {
+    case 'cat':
+    case 'read-file': {
       const p = payload?.path ?? payload?.file_path ?? '';
       return { label: `Read ${path.basename(p) || p}`, kind: 'fileRead' };
     }
     case 'write_file':
     case 'str_replace_editor':
-    case 'create_file': {
+    case 'create_file':
+    case 'write-file':
+    case 'str-replace-editor': {
       const p = payload?.path ?? payload?.file_path ?? '';
       return { label: `Edit ${path.basename(p) || p}`, kind: 'fileWrite' };
     }
@@ -117,11 +121,12 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
   registry.register(new KimiAdapter());
   registry.register(new GeminiAdapter());
 
-  // 3. Forward provider runtime events to renderer
-  providerService.onEvent(broadcast);
-
-  // 3b. Persist messages to DB (accumulate assistant text, save on turn/completed)
+  // 3a. Persist messages and activities to DB FIRST (before broadcast to avoid race)
+  // 3b. Forward provider runtime events to renderer
   if (db) {
+    // Track which turns have activities so we can persist empty assistant messages for worklog display
+    const turnsWithActivities = new Set<string>();
+
     providerService.onEvent((event) => {
       if (event.kind === 'notification' && event.method === 'item/agentMessage/delta') {
         if (event.turnId && event.textDelta) {
@@ -144,12 +149,15 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
         return;
       }
       if (event.kind === 'notification' && event.method === 'item/tool/started') {
+        if (event.turnId) {
+          turnsWithActivities.add(`${event.threadId}:${event.turnId}`);
+        }
         if (event.turnId && db) {
           const payload = (event as any).payload ?? {};
           const toolName = (event as any).toolName ?? payload?.toolName ?? 'tool';
           const { label, kind } = mapToolToActivity(toolName, payload);
           try {
-            const activity = db.addActivity({
+            db.addActivity({
               thread_id: event.threadId,
               turn_id: event.turnId,
               item_id: event.itemId ?? undefined,
@@ -159,7 +167,6 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
               tool_name: toolName,
               tool_input: JSON.stringify(payload),
             });
-            broadcast({ ...event, _activityId: activity?.id } as ProviderRuntimeEvent);
           } catch (e: any) {
             console.error('[Provider] Failed to save activity:', e.message);
           }
@@ -183,7 +190,6 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
                 payload?.exitCode ?? undefined,
                 endedAt
               );
-              broadcast({ ...event, _activityId: match.id } as ProviderRuntimeEvent);
             }
           } catch (e: any) {
             console.error('[Provider] Failed to update activity:', e.message);
@@ -207,6 +213,22 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
             } catch (e: any) {
               console.error('[Provider] Failed to save assistant message:', e.message);
             }
+          } else {
+            // If there were activities but no text content, save an empty assistant message
+            // so the UI can still display the worklog for this turn
+            const hadActivities = turnsWithActivities.has(key);
+            if (hadActivities) {
+              try {
+                const metadata = JSON.stringify({ endTime, durationMs });
+                db.addMessage(event.threadId, 'assistant', '', metadata, event.turnId);
+                console.log('[Provider] Saved empty assistant message (worklog only), thread:', event.threadId);
+              } catch (e: any) {
+                console.error('[Provider] Failed to save empty assistant message:', e.message);
+              }
+              turnsWithActivities.delete(key);
+            } else {
+              console.log('[Provider] turn/completed with empty content, thread:', event.threadId);
+            }
           }
           turnAccumulator.delete(key);
           turnStartTimes.delete(key);
@@ -216,6 +238,9 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
       }
     });
   }
+
+  // Broadcast events to renderer AFTER DB persistence
+  providerService.onEvent(broadcast);
 
   // 4. IPC handlers
   ipcMain.handle('provider:getStatuses', () => healthService.getAllStatuses());
@@ -268,10 +293,16 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
 
   ipcMain.handle('provider:sendTurn', async (_, threadId: number, turnId: string, prompt: string, contextFiles?: string[]) => {
     if (db) {
-      try { db.addMessage(threadId, 'user', prompt, undefined, turnId); } catch {}
+      try {
+        db.addMessage(threadId, 'user', prompt, undefined, turnId);
+        console.log('[Provider] Saved user message to DB, thread:', threadId);
+      } catch (e: any) {
+        console.error('[Provider] Failed to save user message:', e.message);
+      }
     }
     await providerService.sendTurn({
       threadId,
+      turnId,
       input: prompt,
       attachments: contextFiles?.map((p) => ({ path: p })),
     });
@@ -319,6 +350,14 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
     const adapter = registry.get('opencode') as any;
     if (adapter && typeof adapter.getCachedModels === 'function') {
       return adapter.getCachedModels() as import('../model').OpenCodeModel[];
+    }
+    return [];
+  });
+
+  ipcMain.handle('provider:getKimiModels', async () => {
+    const adapter = registry.get('kimi') as any;
+    if (adapter && typeof adapter.getCachedModels === 'function') {
+      return adapter.getCachedModels();
     }
     return [];
   });

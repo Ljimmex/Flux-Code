@@ -223,6 +223,23 @@
   color: inherit;
 }
 
+/* Shiki output overrides */
+.code-pre .shiki {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: inherit;
+  line-height: inherit;
+  border-radius: 0;
+  background: transparent !important;
+}
+
+.code-pre .shiki code {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
 /* Images */
 .markdown-img {
   max-width: 100%;

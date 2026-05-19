@@ -41,25 +41,50 @@ export function useProviderEvents() {
           }
         }).catch(() => {});
       }
+      // Fetch Kimi model variants if kimi models are present
+      if (models['kimi'] && models['kimi'].length > 0) {
+        window.electronAPI.provider.getKimiModels().then((meta) => {
+          meta.forEach((m: any) => {
+            if (m.variants) {
+              setModelVariants(m.id, m.variants);
+            }
+          });
+          // Auto-select first variant for current model only if none is set yet
+          const currentVariant = (providerDrafts['kimi']?.modelOptions as Record<string, unknown> | undefined)?.variant as string | undefined;
+          if (!currentVariant) {
+            const currentMeta = meta.find((m: any) => m.id === activeModel);
+            if (currentMeta?.variants) {
+              const keys = Object.keys(currentMeta.variants);
+              if (keys.length > 0) {
+                setModelOptions('kimi', { variant: keys[0] });
+              }
+            }
+          }
+        }).catch(() => {});
+      }
     });
 
     const unsubEvent = window.electronAPI.onProviderEvent((event) => {
       // T3 Code event schema: event.kind + event.method
       if (event.kind === 'notification' && event.method === 'item/agentMessage/delta') {
-        if (event.turnId && event.textDelta) {
-          appendStreamChunk(event.turnId, event.textDelta);
+        if (event.turnId && event.textDelta && event.threadId != null) {
+          appendStreamChunk(event.threadId, event.turnId, event.textDelta);
         }
         return;
       }
 
       if (event.kind === 'notification' && event.method === 'turn/completed') {
-        endStreaming();
+        if (event.threadId != null) {
+          endStreaming(event.threadId);
+        }
         window.dispatchEvent(new CustomEvent('provider:turn-completed', { detail: { threadId: event.threadId } }));
         return;
       }
 
       if (event.kind === 'error' && event.method === 'error/turn') {
-        endStreaming();
+        if (event.threadId != null) {
+          endStreaming(event.threadId);
+        }
         setError(event.message ?? 'Turn error');
         setTimeout(() => setError(null), 5000);
         return;
@@ -93,6 +118,26 @@ export function useProviderEvents() {
               const keys = Object.keys(currentMeta.variants);
               if (keys.length > 0) {
                 setModelOptions('opencode', { variant: keys[0] });
+              }
+            }
+          }
+        }).catch(() => {});
+      }
+      if (kind === 'kimi' && models.length > 0) {
+        window.electronAPI.provider.getKimiModels().then((meta) => {
+          meta.forEach((m: any) => {
+            if (m.variants) {
+              setModelVariants(m.id, m.variants);
+            }
+          });
+          // Only update variant if none is set yet
+          const currentVariant = (providerDrafts['kimi']?.modelOptions as Record<string, unknown> | undefined)?.variant as string | undefined;
+          if (!currentVariant) {
+            const currentMeta = meta.find((m: any) => m.id === activeModel);
+            if (currentMeta?.variants) {
+              const keys = Object.keys(currentMeta.variants);
+              if (keys.length > 0) {
+                setModelOptions('kimi', { variant: keys[0] });
               }
             }
           }

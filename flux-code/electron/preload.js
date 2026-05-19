@@ -52,6 +52,7 @@ const api = {
         checkUpdates: () => ipcRenderer.invoke('provider:checkUpdates'),
         updateCli: (kind) => ipcRenderer.invoke('provider:updateCli', kind),
         getOpenCodeModels: () => ipcRenderer.invoke('provider:getOpenCodeModels'),
+        getKimiModels: () => ipcRenderer.invoke('provider:getKimiModels'),
     },
     onChatToken: (callback) => {
         const handler = (_, data) => callback(data);
@@ -94,6 +95,11 @@ const api = {
         return () => {
             ipcRenderer.removeListener('navigate-to', handler);
         };
+    },
+    diff: {
+        readFile: (filePath) => ipcRenderer.invoke('diff:readFile', filePath),
+        gitDiff: (projectPath, filePath) => ipcRenderer.invoke('diff:gitDiff', projectPath, filePath),
+        gitShow: (projectPath, filePath, ref) => ipcRenderer.invoke('diff:gitShow', projectPath, filePath, ref),
     },
 };
 contextBridge.exposeInMainWorld('electronAPI', api);

@@ -114,7 +114,7 @@ export class OllamaAdapter implements ProviderAdapterShape {
     const session = this.sessions.get(input.threadId);
     if (!session) throw new Error(`Session for thread ${input.threadId} not found`);
 
-    const turnId = generateTurnId();
+    const turnId = input.turnId || generateTurnId();
     session.turnId = turnId;
 
     this.emit({

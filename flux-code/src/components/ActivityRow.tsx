@@ -4,6 +4,7 @@ import type { ActivityItem, ActivityKind, ActivityStatus } from '../types/activi
 
 interface Props {
   activity: ActivityItem;
+  isLatest?: boolean;
 }
 
 function ActivityIcon({ kind }: { kind: ActivityKind }) {
@@ -43,7 +44,7 @@ function formatDurationMs(ms: number): string {
   return `${secs}s`;
 }
 
-export const ActivityRow = memo(function ActivityRow({ activity }: Props) {
+export const ActivityRow = memo(function ActivityRow({ activity, isLatest }: Props) {
   const duration =
     activity.ended_at && activity.started_at
       ? formatDurationMs(
@@ -52,7 +53,7 @@ export const ActivityRow = memo(function ActivityRow({ activity }: Props) {
       : null;
 
   return (
-    <div className={`activity-row activity-row--${activity.status}`}>
+    <div className={`activity-row activity-row--${activity.status} ${isLatest ? 'activity-row--latest' : ''}`}>
       <ActivityIcon kind={activity.kind} />
       <span className="activity-label">{activity.label}</span>
       {duration && <span className="activity-duration">{duration}</span>}

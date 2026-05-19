@@ -144,8 +144,12 @@ export class DatabaseManager {
     // Add turn_id column to messages if not exists (backward compat)
     const msgCols = this.db.pragma("table_info(messages)") as Array<{ name: string }>;
     const hasTurnId = msgCols.some(c => c.name === 'turn_id');
+    console.log('[DB] messages columns:', msgCols.map(c => c.name).join(', '));
+    console.log('[DB] hasTurnId:', hasTurnId);
     if (!hasTurnId) {
+      console.log('[DB] Adding turn_id column to messages...');
       this.db.exec('ALTER TABLE messages ADD COLUMN turn_id TEXT');
+      console.log('[DB] turn_id column added.');
     }
 
     // Create activities table if not exists
@@ -256,9 +260,13 @@ export class DatabaseManager {
   }
 
   addMessage(threadId: number, role: string, content: string, metadata?: string, turnId?: string): any {
-    if (!this.db) return null;
+    if (!this.db) {
+      console.error('[DB] addMessage: DB not initialized');
+      return null;
+    }
     const stmt = this.db.prepare('INSERT INTO messages (thread_id, role, content, metadata, turn_id) VALUES (?, ?, ?, ?, ?)');
     const result = stmt.run(threadId, role, content, metadata ?? null, turnId ?? null);
+    console.log('[DB] addMessage: thread:', threadId, 'role:', role, 'turnId:', turnId, 'id:', result.lastInsertRowid);
     return this.db.prepare('SELECT * FROM messages WHERE id = ?').get(result.lastInsertRowid);
   }
 

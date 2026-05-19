@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "Vibe Coder — Luxury Dark Workspace",
+  "entry": "vibe-coder-workspace.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-05-19T11:28:17.383Z",
+  "updatedAt": "2026-05-19T11:28:17.387Z",
+  "metadata": {
+    "identifier": "vibe-coder-workspace",
+    "artifactType": "text/html",
+    "inferred": false
+  }
+}

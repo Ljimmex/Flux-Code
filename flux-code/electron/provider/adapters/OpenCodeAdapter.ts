@@ -1,6 +1,6 @@
-import { spawn, type ChildProcess } from 'child_process';
+import { type ChildProcess } from 'child_process';
 import { createInterface } from 'readline';
-import { execSync, exec } from 'child_process';
+import { spawnCli } from './spawnCli';
 import type { ProviderAdapterShape } from '../ProviderAdapter';
 import type {
   ProviderKind,
@@ -144,7 +144,7 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
       throw new Error(`No session state for thread ${input.threadId}. Call startSession first.`);
     }
 
-    const turnId = generateTurnId();
+    const turnId = input.turnId || generateTurnId();
 
     this.emit({
       id: generateEventId(),
@@ -163,22 +163,28 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
     const fullModelId = modelId.includes('/') ? modelId : `opencode/${modelId}`;
     console.log('[OpenCodeAdapter] Using model:', fullModelId);
 
-    const args: string[] = ['run', '--model', fullModelId, prompt];
+    // Build args: all flags FIRST, then positional message LAST
+    const args: string[] = ['run', '--model', fullModelId, '--dangerously-skip-permissions', '--format', 'json'];
 
     if (state.variant) {
-      args.push('--variant', state.variant);
+      // Some variants like 'max' may not be supported by opencode CLI
+      const safeVariant = state.variant === 'max' ? 'high' : state.variant;
+      args.push('--variant', safeVariant);
     }
 
-    console.log('[OpenCodeAdapter] Spawning:', this.binaryPath, args.join(' '));
+    // Positional message argument must come LAST after all flags
+    args.push(prompt);
 
-    const proc = spawn(this.binaryPath, args, {
+    console.log('[OpenCodeAdapter] Spawning:', this.binaryPath, JSON.stringify(args));
+    console.log('[OpenCodeAdapter] cwd:', state.cwd);
+
+    const proc = spawnCli(this.binaryPath, args, {
       cwd: state.cwd,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,
         FORCE_COLOR: '0',
         NO_COLOR: '1',
-        OPENCODE_CONFIG_CONTENT: JSON.stringify({ model: fullModelId }),
       },
     });
 
@@ -188,7 +194,7 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
     let stderrAccum = '';
     const openToolIds = new Set<string>();
 
-    // Parse stderr for synthetic tool events (OpenCode doesn't emit structured events)
+    // Parse stderr for synthetic tool events (OpenCode progress/status info)
     const stderrRl = createInterface({ input: proc.stderr! });
     stderrRl.on('line', (rawLine) => {
       const line = rawLine.replace(/\x1b\[[0-9;]*m/g, '').trim();
@@ -279,26 +285,150 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
         });
         return;
       }
-    });
 
-    const rl = createInterface({ input: proc.stdout! });
-    rl.on('line', (rawLine) => {
-      // Strip ANSI escape codes (e.g. [0m, [91m) so markdown parsers work correctly
-      const line = rawLine.replace(/\x1b\[[0-9;]*m/g, '');
-      console.log('[OpenCodeAdapter] stdout line:', line);
-      stdoutAccum += line + '\n';
-      if (line.trim()) {
+      // Detect ERROR logs
+      if (line.includes('ERROR ') && line.includes('error=')) {
+        console.error('[OpenCodeAdapter] Detected error in stderr:', line);
+        let errorMsg = 'An error occurred during execution';
+        const errorJsonMatch = line.match(/error=({.*})/);
+        if (errorJsonMatch) {
+          try {
+            const errObj = JSON.parse(errorJsonMatch[1]);
+            if (errObj.error) {
+               const name = errObj.error.name || 'Error';
+               let details = errObj.error.message || errObj.error.reason || errObj.error.responseBody;
+               
+               // If it's a RetryError, try to extract the root cause from the nested errors array
+               if (name === 'AI_RetryError' && Array.isArray(errObj.error.errors) && errObj.error.errors.length > 0) {
+                 const rootErr = errObj.error.errors[0];
+                 details = rootErr.message || rootErr.reason || rootErr.responseBody || 'API Call failed';
+               }
+               
+               if (typeof details === 'object') details = JSON.stringify(details);
+               errorMsg = `${name}: ${details || 'API Call failed'}`;
+            }
+          } catch (e) {}
+        } else {
+           errorMsg = line;
+        }
+
         this.emit({
           id: generateEventId(),
-          kind: 'notification',
+          kind: 'error',
           provider: 'opencode',
           threadId: input.threadId,
           createdAt: new Date().toISOString(),
-          method: 'item/agentMessage/delta',
-          turnId,
-          textDelta: line + '\n',
+          method: 'error/turn',
+          message: errorMsg,
         });
+
+        if (line.includes('AI_APICallError') || line.includes('maxRetriesExceeded')) {
+          // Kill process to prevent hanging
+          try {
+             if (proc && !proc.killed) {
+               proc.kill();
+             }
+          } catch (e) {}
+        }
       }
+    });
+
+    // Parse stdout — with --format json, each line is a JSON event
+    const rl = createInterface({ input: proc.stdout! });
+    rl.on('line', (rawLine) => {
+      // Strip ANSI escape codes
+      const line = rawLine.replace(/\x1b\[[0-9;]*m/g, '');
+      if (!line.trim()) return;
+      stdoutAccum += line + '\n';
+
+      // Try to parse as JSON event (--format json mode)
+      try {
+        const event = JSON.parse(line);
+        // OpenCode JSON events have a 'type' field
+        if (event.type === 'text' && event.content) {
+          this.emit({
+            id: generateEventId(),
+            kind: 'notification',
+            provider: 'opencode',
+            threadId: input.threadId,
+            createdAt: new Date().toISOString(),
+            method: 'item/agentMessage/delta',
+            turnId,
+            textDelta: event.content,
+          });
+          return;
+        }
+        // Tool call events
+        if (event.type === 'tool_call' || event.type === 'tool_use') {
+          const toolId = event.id || `tool-${Date.now()}`;
+          const toolName = event.name || event.tool || 'tool';
+          openToolIds.add(toolId);
+          this.emit({
+            id: generateEventId(),
+            kind: 'notification',
+            provider: 'opencode',
+            threadId: input.threadId,
+            createdAt: new Date().toISOString(),
+            method: 'item/tool/started',
+            turnId,
+            itemId: toolId,
+            toolName: toolName.toLowerCase().replace(/_/g, '-'),
+            payload: event.input || event.arguments || {},
+          });
+          return;
+        }
+        // Tool result events
+        if (event.type === 'tool_result') {
+          const toolId = event.tool_call_id || event.id || '';
+          if (toolId && openToolIds.has(toolId)) {
+            this.emit({
+              id: generateEventId(),
+              kind: 'notification',
+              provider: 'opencode',
+              threadId: input.threadId,
+              createdAt: new Date().toISOString(),
+              method: 'item/tool/completed',
+              turnId,
+              itemId: toolId,
+              payload: { result: event.content || event.output || '' },
+            });
+            openToolIds.delete(toolId);
+          }
+          return;
+        }
+        // If JSON but unknown type, check for content/text fields
+        if (event.content || event.text || event.message) {
+          const text = event.content || event.text || event.message;
+          if (typeof text === 'string' && text.trim()) {
+            this.emit({
+              id: generateEventId(),
+              kind: 'notification',
+              provider: 'opencode',
+              threadId: input.threadId,
+              createdAt: new Date().toISOString(),
+              method: 'item/agentMessage/delta',
+              turnId,
+              textDelta: text,
+            });
+          }
+          return;
+        }
+      } catch {
+        // Not JSON — treat as plain text output (fallback for default format)
+      }
+
+      // Fallback: emit raw text line as message delta
+      console.log('[OpenCodeAdapter] stdout line (raw):', line);
+      this.emit({
+        id: generateEventId(),
+        kind: 'notification',
+        provider: 'opencode',
+        threadId: input.threadId,
+        createdAt: new Date().toISOString(),
+        method: 'item/agentMessage/delta',
+        turnId,
+        textDelta: line + '\n',
+      });
     });
 
     proc.on('error', (err) => {
@@ -346,9 +476,10 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
       });
     };
 
-    proc.on('exit', (code) => {
-      console.log('[OpenCodeAdapter] proc exit code:', code, 'stderr:', stderrAccum.trim() || '(empty)', 'stdout:', stdoutAccum.trim() || '(empty)');
-      console.log('[OpenCodeAdapter] stdout raw (first 300 chars):', JSON.stringify(stdoutAccum.slice(0, 300)));
+    proc.on('exit', (code, signal) => {
+      console.log('[OpenCodeAdapter] proc exit code:', code, 'signal:', signal, 'stderr length:', stderrAccum.length, 'stdout length:', stdoutAccum.length);
+      console.log('[OpenCodeAdapter] stderr full:', stderrAccum.trim() || '(empty)');
+      console.log('[OpenCodeAdapter] stdout raw (first 500 chars):', JSON.stringify(stdoutAccum.slice(0, 500)));
       if (code !== 0 && code !== null) {
         this.emit({
           id: generateEventId(),
@@ -365,13 +496,6 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
     });
 
     console.log('[OpenCodeAdapter] proc.pid:', proc.pid);
-
-    // Safety timeout — kill opencode if it hangs for > 30s (free models can be slow)
-    const safetyTimeout = setTimeout(() => {
-      console.warn('[OpenCodeAdapter] Safety timeout (30s) — killing hung process for thread', input.threadId);
-      proc.kill('SIGTERM');
-    }, 30_000);
-    proc.on('exit', () => clearTimeout(safetyTimeout));
 
     return { turnId };
   }

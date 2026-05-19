@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { GitCompare, Terminal, RotateCcw } from './icons';
 
 interface Props {
@@ -7,6 +7,34 @@ interface Props {
   view?: 'chat' | 'settings';
   settingsSection?: string;
   onRestoreDefaults?: () => void;
+}
+
+/* ─── Tooltip button for window controls ─── */
+function TooltipButton({
+  children,
+  onClick,
+  label,
+  className,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  label: string;
+  className?: string;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <button
+      className={className}
+      onClick={onClick}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onFocus={() => setShow(true)}
+      onBlur={() => setShow(false)}
+    >
+      {children}
+      {show && <span className="window-btn-tooltip">{label}</span>}
+    </button>
+  );
 }
 
 export default function TopBar({ activeProject, activeThread, view = 'chat', settingsSection, onRestoreDefaults }: Props) {
@@ -59,15 +87,27 @@ export default function TopBar({ activeProject, activeThread, view = 'chat', set
           </>
         )}
         <div className="window-controls">
-          <button className="window-btn minimize" onClick={() => window.electronAPI.window.minimize()} title="Minimize">
+          <TooltipButton
+            className="window-btn minimize"
+            onClick={() => window.electronAPI.window.minimize()}
+            label="Minimize"
+          >
             <MinimizeIcon />
-          </button>
-          <button className="window-btn maximize" onClick={() => window.electronAPI.window.maximize()} title={isMaximized ? 'Restore' : 'Maximize'}>
+          </TooltipButton>
+          <TooltipButton
+            className="window-btn maximize"
+            onClick={() => window.electronAPI.window.maximize()}
+            label={isMaximized ? 'Restore' : 'Maximize'}
+          >
             {isMaximized ? <RestoreIcon /> : <MaximizeIcon />}
-          </button>
-          <button className="window-btn close" onClick={() => window.electronAPI.window.close()} title="Close">
+          </TooltipButton>
+          <TooltipButton
+            className="window-btn close"
+            onClick={() => window.electronAPI.window.close()}
+            label="Close"
+          >
             <CloseIcon />
-          </button>
+          </TooltipButton>
         </div>
       </div>
     </header>
