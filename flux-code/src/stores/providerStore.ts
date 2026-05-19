@@ -47,6 +47,7 @@ function loadEnabled(): Record<ProviderKind, boolean> {
     ollama: true,
     kimi: true,
     gemini: true,
+    antigravity: true,
   };
 }
 
@@ -97,6 +98,7 @@ function loadDrafts(): Record<ProviderKind, ProviderDraft> {
     ollama: { model: DEFAULT_MODEL.ollama },
     kimi: { model: DEFAULT_MODEL.kimi },
     gemini: { model: DEFAULT_MODEL.gemini },
+    antigravity: { model: DEFAULT_MODEL.antigravity },
   };
 }
 

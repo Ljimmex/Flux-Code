@@ -12,7 +12,8 @@ export type ProviderKind =
   | 'opencode'
   | 'ollama'
   | 'kimi'
-  | 'gemini';
+  | 'gemini'
+  | 'antigravity';
 
 // ─── Session & Runtime ──────────────────────────────────────────────────────
 
@@ -211,6 +212,7 @@ export const FALLBACK_MODELS: Record<ProviderKind, string[]> = {
   ollama: ['llama3.3', 'llama3.2', 'mistral'],
   kimi: ['kimi-code/kimi-for-coding', 'kimi-code/kimi-for-coding,thinking'],
   gemini: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+  antigravity: ['gemini-2.5-pro', 'gemini-2.5-flash'],
 };
 
 export const DEFAULT_MODEL: Record<ProviderKind, string> = {
@@ -220,6 +222,7 @@ export const DEFAULT_MODEL: Record<ProviderKind, string> = {
   ollama: 'llama3.3',
   kimi: 'kimi-code/kimi-for-coding',
   gemini: 'gemini-2.5-pro',
+  antigravity: 'gemini-2.5-pro',
 };
 
 export const PROVIDER_DISPLAY_NAMES: Record<ProviderKind, string> = {
@@ -229,6 +232,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<ProviderKind, string> = {
   ollama: 'Ollama (Local Models)',
   kimi: 'Kimi (Moonshot AI)',
   gemini: 'Gemini (Google)',
+  antigravity: 'Antigravity (Google)',
 };
 
 export const PROVIDER_AUTH_INSTRUCTIONS: Record<ProviderKind, string[]> = {
@@ -238,6 +242,7 @@ export const PROVIDER_AUTH_INSTRUCTIONS: Record<ProviderKind, string[]> = {
   ollama: ['# Install Ollama from ollama.com', 'ollama pull llama3.3', 'ollama pull mistral'],
   kimi: ['npm install -g kimi-cli', 'kimi-cli auth login'],
   gemini: ['npm install -g @google/gemini-cli', 'gemini auth login'],
+  antigravity: ['curl -fsSL https://antigravity.google/cli/install.sh | bash', 'agy --print "hello"'],
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { ArrowUp, Square, Bot, Lock, Check, Search, Copy, Star, ChevronLeft, ChevronRight } from './icons';
 import {
-  CodexIcon, OllamaIcon, OpenCodeIcon, ClaudeIcon, KimiIcon, GeminiIcon,
+  CodexIcon, OllamaIcon, OpenCodeIcon, ClaudeIcon, KimiIcon, GeminiIcon, AntigravityIcon,
 } from './icons';
 import logo from '../Fluxavatar.png';
 import type { Thread, Project } from '../App';
@@ -100,7 +100,7 @@ const CLAUDE_EFFORTS = [
   { value: 'ultrathink', label: 'Ultrathink' },
 ] as const;
 
-const PROVIDER_ORDER: ProviderKind[] = ['codex', 'claudeCode', 'opencode', 'ollama', 'kimi', 'gemini'];
+const PROVIDER_ORDER: ProviderKind[] = ['codex', 'claudeCode', 'opencode', 'ollama', 'kimi', 'gemini', 'antigravity'];
 
 const PROVIDER_ICONS: Record<ProviderKind, React.ComponentType<{ size?: number; className?: string }>> = {
   codex: CodexIcon,
@@ -109,6 +109,7 @@ const PROVIDER_ICONS: Record<ProviderKind, React.ComponentType<{ size?: number; 
   ollama: OllamaIcon,
   kimi: KimiIcon,
   gemini: GeminiIcon,
+  antigravity: AntigravityIcon,
 };
 
 const PROVIDER_LABELS: Record<ProviderKind, string> = {
@@ -118,6 +119,7 @@ const PROVIDER_LABELS: Record<ProviderKind, string> = {
   ollama: 'Ollama',
   kimi: 'Kimi',
   gemini: 'Gemini',
+  antigravity: 'Antigravity',
 };
 
 function getEnabledProviders(enabledProviders: Record<string, boolean>): ProviderKind[] {

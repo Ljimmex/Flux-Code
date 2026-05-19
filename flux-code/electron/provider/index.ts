@@ -15,6 +15,7 @@ import { OllamaAdapter } from './adapters/OllamaAdapter';
 import { OpenCodeAdapter } from './adapters/OpenCodeAdapter';
 import { KimiAdapter } from './adapters/KimiAdapter';
 import { GeminiAdapter } from './adapters/GeminiAdapter';
+import { AntigravityAdapter } from './adapters/AntigravityAdapter';
 
 let providerService: ProviderService;
 let healthService: HealthService;
@@ -120,6 +121,7 @@ export async function initProviders(win: BrowserWindow, db?: DatabaseManager): P
   registry.register(new OpenCodeAdapter());
   registry.register(new KimiAdapter());
   registry.register(new GeminiAdapter());
+  registry.register(new AntigravityAdapter());
 
   // 3a. Persist messages and activities to DB FIRST (before broadcast to avoid race)
   // 3b. Forward provider runtime events to renderer

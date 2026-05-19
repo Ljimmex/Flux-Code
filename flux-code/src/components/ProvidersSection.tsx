@@ -3,7 +3,7 @@ import { useProviderStore } from '../stores/providerStore';
 import { PROVIDER_DISPLAY_NAMES, PROVIDER_AUTH_INSTRUCTIONS, type ProviderKind } from '../types/provider';
 import {
   RefreshCw, ChevronDown, AlertCircle, ArrowUpCircle,
-  CodexIcon, OllamaIcon, OpenCodeIcon, ClaudeIcon, KimiIcon, GeminiIcon,
+  CodexIcon, OllamaIcon, OpenCodeIcon, ClaudeIcon, KimiIcon, GeminiIcon, AntigravityIcon,
 } from './icons';
 import ProviderUpdateModal from './ProviderUpdateModal';
 
@@ -16,6 +16,7 @@ const PROVIDER_ICONS: Record<ProviderKind, React.ComponentType<{ size?: number; 
   ollama: OllamaIcon,
   kimi: KimiIcon,
   gemini: GeminiIcon,
+  antigravity: AntigravityIcon,
 };
 
 const STATUS_COLORS: Record<StatusKind, string> = {
@@ -25,7 +26,7 @@ const STATUS_COLORS: Record<StatusKind, string> = {
   error: '#f85149',
 };
 
-const ALL_PROVIDERS: ProviderKind[] = ['codex', 'claudeCode', 'opencode', 'ollama', 'kimi', 'gemini'];
+const ALL_PROVIDERS: ProviderKind[] = ['codex', 'claudeCode', 'opencode', 'ollama', 'kimi', 'gemini', 'antigravity'];
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
   return (
@@ -88,6 +89,7 @@ const PROVIDER_INSTALL_COMMANDS: Record<ProviderKind, string | undefined> = {
   ollama: undefined,
   kimi: 'npm install -g kimi-cli@latest',
   gemini: 'npm install -g @google/gemini-cli@latest',
+  antigravity: 'curl -fsSL https://antigravity.google/cli/install.sh | bash',
 };
 
 function ProviderCard({
