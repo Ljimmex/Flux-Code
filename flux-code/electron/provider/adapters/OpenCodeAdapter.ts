@@ -190,6 +190,10 @@ export class OpenCodeAdapter implements ProviderAdapterShape {
 
     this.sessions.set(input.threadId, { process: proc, turnId });
 
+    // Close stdin immediately — opencode run has the prompt via args,
+    // an open stdin pipe causes the process to hang waiting for input
+    proc.stdin?.end();
+
     let stdoutAccum = '';
     let stderrAccum = '';
     const openToolIds = new Set<string>();

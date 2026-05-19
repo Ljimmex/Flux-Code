@@ -9,16 +9,16 @@ export const FileList = memo(function FileList({ paths, descriptions = {} }: Fil
   if (paths.length === 0) return null;
 
   return (
-    <div className="file-list">
+    <span className="file-list">
       {paths.map((path) => {
         const desc = descriptions[path];
         return (
-          <div key={path} className="file-list-row">
+          <span key={path} className="file-list-row">
             <span className="file-list-path">{path}</span>
             {desc && <span className="file-list-desc"> : {desc}</span>}
-          </div>
+          </span>
         );
       })}
-    </div>
+    </span>
   );
 });

@@ -160,6 +160,9 @@ export class KimiAdapter implements ProviderAdapterShape {
 
     session.process = proc;
 
+    // Close stdin — kimi has the prompt via --prompt, an open pipe can hang it
+    proc.stdin?.end();
+
     let stdoutAccum = '';
     let sessionId: string | null = null;
     const openToolIds = new Set<string>();
@@ -262,9 +265,17 @@ export class KimiAdapter implements ProviderAdapterShape {
       }
     });
 
+    let stderrAccum = '';
     proc.stderr?.on('data', (data) => {
       const text = data.toString();
+      stderrAccum += text;
       console.log('[KimiAdapter] stderr:', text.trim());
+
+      // Kimi outputs the session resume hint on stderr
+      const resumeMatch = text.match(/To resume this session: kimi -r ([a-f0-9-]+)/);
+      if (resumeMatch && !sessionId) {
+        sessionId = resumeMatch[1];
+      }
     });
 
     proc.on('error', (err) => {
@@ -281,11 +292,23 @@ export class KimiAdapter implements ProviderAdapterShape {
       });
     });
 
-    proc.on('exit', (code, signal) => {
-      console.log('[KimiAdapter] proc exit code:', code, 'signal:', signal, 'sessionId:', sessionId);
-      if (sessionId) {
-        session.sessionId = sessionId;
-      }
+    let stdoutDone = false;
+    let processDone = false;
+
+    const tryEmitCompleted = () => {
+      if (!stdoutDone || !processDone) return;
+      emitCompleted();
+    };
+
+    rl.on('close', () => {
+      stdoutDone = true;
+      tryEmitCompleted();
+    });
+
+    const emitCompleted = () => {
+      if (session.turnId === null) return;
+      session.turnId = null;
+      session.process = undefined;
 
       // Close any remaining open tool events
       for (const itemId of openToolIds) {
@@ -302,20 +325,6 @@ export class KimiAdapter implements ProviderAdapterShape {
       }
       openToolIds.clear();
 
-      if (code !== 0 && code !== null) {
-        const stderr = proc.stderr ? '[stderr available]' : '[no stderr]';
-        this.emit({
-          id: generateEventId(),
-          kind: 'error',
-          provider: 'kimi',
-          threadId: input.threadId,
-          createdAt: new Date().toISOString(),
-          method: 'error/turn',
-          turnId,
-          message: `Kimi exited with code ${code}. ${stderr}`,
-        });
-      }
-
       this.emit({
         id: generateEventId(),
         kind: 'notification',
@@ -325,8 +334,30 @@ export class KimiAdapter implements ProviderAdapterShape {
         method: 'turn/completed',
         turnId,
       });
-      session.turnId = null;
-      session.process = undefined;
+    };
+
+    proc.on('exit', (code, signal) => {
+      console.log('[KimiAdapter] proc exit code:', code, 'signal:', signal, 'sessionId:', sessionId);
+      if (sessionId) {
+        session.sessionId = sessionId;
+      }
+
+      if (code !== 0 && code !== null) {
+        const stderrText = stderrAccum.trim() || '(empty)';
+        this.emit({
+          id: generateEventId(),
+          kind: 'error',
+          provider: 'kimi',
+          threadId: input.threadId,
+          createdAt: new Date().toISOString(),
+          method: 'error/turn',
+          turnId,
+          message: `Kimi exited with code ${code}. stderr: ${stderrText}`,
+        });
+      }
+
+      processDone = true;
+      tryEmitCompleted();
     });
 
     return { turnId };

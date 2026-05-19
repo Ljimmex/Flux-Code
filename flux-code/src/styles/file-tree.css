@@ -11,6 +11,7 @@
 /* ─── Flat File List ──────────────────────────────────────────────────── */
 
 .file-list {
+  display: block;
   font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.6;

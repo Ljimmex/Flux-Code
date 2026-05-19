@@ -80,10 +80,16 @@ async function highlightCode(code: string, lang: string): Promise<string> {
 function CodeBlock({
   className,
   children,
+  inline,
 }: {
   className?: string;
   children?: ReactNode;
+  inline?: boolean;
 }) {
+  if (inline) {
+    return <InlineCode>{children}</InlineCode>;
+  }
+
   const codeRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [, setHighlighted] = useState(false);
@@ -277,7 +283,7 @@ export default function ChatMarkdown({ content }: ChatMarkdownProps) {
             const isInline = !!(props as any).inline;
             if (!isInline) {
               return (
-                <CodeBlock className={className} {...rest}>
+                <CodeBlock className={className} inline={false} {...rest}>
                   {children}
                 </CodeBlock>
               );
