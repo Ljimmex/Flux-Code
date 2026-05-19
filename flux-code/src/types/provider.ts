@@ -8,7 +8,6 @@ export type ProviderKind =
   | 'opencode'
   | 'ollama'
   | 'kimi'
-  | 'gemini'
   | 'antigravity';
 
 export type ProviderStatus =
@@ -23,7 +22,6 @@ export const DEFAULT_MODEL: Record<ProviderKind, string> = {
   opencode: 'opencode/deepseek-v4-flash-free',
   ollama: 'llama3.3',
   kimi: 'kimi-k2.6',
-  gemini: 'gemini-2.5-pro',
   antigravity: 'gemini-2.5-pro',
 };
 
@@ -33,7 +31,6 @@ export const PROVIDER_DISPLAY_NAMES: Record<ProviderKind, string> = {
   opencode: 'OpenCode',
   ollama: 'Ollama (Local Models)',
   kimi: 'Kimi (Moonshot AI)',
-  gemini: 'Gemini (Google)',
   antigravity: 'Antigravity (Google)',
 };
 
@@ -43,6 +40,5 @@ export const PROVIDER_AUTH_INSTRUCTIONS: Record<ProviderKind, string[]> = {
   opencode: ['npm install -g opencode-ai', 'opencode config set provider moonshot'],
   ollama: ['# Install Ollama from ollama.com', 'ollama pull llama3.3'],
   kimi: ['npm install -g kimi-cli', 'kimi-cli auth login'],
-  gemini: ['npm install -g @google/gemini-cli', 'gemini auth login'],
   antigravity: ['curl -fsSL https://antigravity.google/cli/install.sh | bash', 'agy --print "hello"'],
 };

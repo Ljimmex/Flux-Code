@@ -7,7 +7,6 @@ const PROVIDER_NPM_PACKAGES: Record<ProviderKind, string | undefined> = {
   opencode: 'opencode-ai',
   ollama: undefined,
   kimi: 'kimi-cli',
-  gemini: '@google/gemini-cli',
   antigravity: undefined,
 };
 
@@ -17,7 +16,6 @@ export const PROVIDER_INSTALL_COMMANDS: Record<ProviderKind, string | undefined>
   opencode: 'npm install -g opencode-ai@latest',
   ollama: undefined,
   kimi: 'uv tool upgrade kimi-cli --no-cache',
-  gemini: 'npm install -g @google/gemini-cli@latest',
   antigravity: 'curl -fsSL https://antigravity.google/cli/install.sh | bash',
 };
 

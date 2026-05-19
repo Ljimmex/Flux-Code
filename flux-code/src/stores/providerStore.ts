@@ -46,7 +46,6 @@ function loadEnabled(): Record<ProviderKind, boolean> {
     opencode: true,
     ollama: true,
     kimi: true,
-    gemini: true,
     antigravity: true,
   };
 }
@@ -97,7 +96,6 @@ function loadDrafts(): Record<ProviderKind, ProviderDraft> {
     opencode: { model: DEFAULT_MODEL.opencode },
     ollama: { model: DEFAULT_MODEL.ollama },
     kimi: { model: DEFAULT_MODEL.kimi },
-    gemini: { model: DEFAULT_MODEL.gemini },
     antigravity: { model: DEFAULT_MODEL.antigravity },
   };
 }
